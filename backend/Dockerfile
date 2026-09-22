@@ -12,6 +12,7 @@ RUN npm ci --no-audit || npm install --no-audit
 
 COPY . .
 
+ENV DATABASE_URL="mysql://dummy:dummy@localhost:3306/dummy"
 RUN npx prisma generate
 RUN npm run build
 
