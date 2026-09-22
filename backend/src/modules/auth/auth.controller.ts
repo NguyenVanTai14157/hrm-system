@@ -16,6 +16,7 @@ export class AuthController {
   constructor(private auth: AuthService, private config: ConfigService) {}
   private client(req: AuthRequest): ClientApp {
     const value = req.header('X-HRM-Client');
+    const origin = req.header('Origin');
     const isDev = this.config.get('NODE_ENV') !== 'production';
     const allowed = this.config.getOrThrow<string[]>('CORS_ORIGINS');
     if ((value !== 'admin' && value !== 'client') ||

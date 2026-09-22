@@ -1,6 +1,8 @@
 # 00 — Trạng thái dự án
 
-Cập nhật: 2026-09-17. Đây là bản bàn giao chung cho người phát triển, Codex và Antigravity.
+Cập nhật: 2026-09-22. Đây là bản bàn giao chung cho người phát triển, Codex và Antigravity.
+
+Hotfix 2026-09-22: sửa biến origin chưa khai báo trong AuthController.client gây HTTP 500 khi refresh phiên trên Coolify. Backend build và kiểm tra controller đạt (origin hợp lệ, thiếu Origin, origin bị chặn, client sai). Chưa push/redeploy; chưa xác minh dữ liệu MySQL production.
 Đọc file này, [nhật ký bàn giao](08-handoff-log.md), README và đặc tả liên quan trước khi sửa code. Đối chiếu mã nguồn vì tài liệu có thể chưa cập nhật.
 
 ## Phạm vi và quyết định đã chốt

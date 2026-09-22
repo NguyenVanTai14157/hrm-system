@@ -241,3 +241,9 @@ Người dùng yêu cầu bên phải màn hình nhân sự phải gần với h
 - Export/Import hiện trả `message.info`; logic thực (API tải file CSV/Excel) chờ yêu cầu.
 - Checkbox chọn nhiều đã có UI nhưng chưa có action hàng loạt (xóa/xuất nhóm) — chờ yêu cầu.
 - Số lượng trên tab chỉ hiện khi tab đó đang được chọn (dùng `total` API hiện có); hiện đầy đủ mọi tab cần gọi thêm API — chờ xác nhận từ khách.
+
+## 2026-09-22 — Codex: sửa lỗi origin trên Coolify
+
+- AuthController.client đọc header Origin vào biến origin, sửa ReferenceError gây HTTP 500 khi refresh phiên.
+- Backend production build đạt; assertion trên controller đã biên dịch đạt cho origin hợp lệ, thiếu Origin, origin bị chặn và client sai.
+- Không thay đổi database. Bản sửa ở workspace, chưa commit/push/redeploy; chưa xác minh schema/dữ liệu MySQL production.
