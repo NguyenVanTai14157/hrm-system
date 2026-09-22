@@ -1,0 +1,31 @@
+{
+  "name": "1Office HRM - Quản Trị Nhân Sự",
+  "short_name": "HRM 1Office",
+  "description": "Nền tảng quản lý nhân sự, chấm công và phân ca trực tuyến",
+  "start_url": "/hrm/dashboard",
+  "id": "/hrm/dashboard",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#7056d8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

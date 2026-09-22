@@ -1,0 +1,78 @@
+/* features/applications/applications.css */
+.applications-page { min-width:0; background:#f8f9fa; min-height:100%; }
+
+.applications-top-bar {
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8ecf2;
+  flex-shrink: 0;
+}
+
+.app-create-btn {
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid #ef4444;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.app-create-btn:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.applications-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.applications-heading { display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid #e8ecf2; background:#fff; height:48px; flex-shrink:0; }
+.applications-heading .ant-tabs { margin:0; }
+.applications-heading .ant-tabs-nav { margin:0 !important; }
+.applications-heading .ant-tabs-tab { padding:12px 0 !important; margin:0 24px 0 0 !important; color:#788599; font-size:14px; font-weight:500; }
+.applications-heading .ant-tabs-tab-active { color:var(--accent) !important; }
+.app-tab-count { font-size:13px; color:#788599; margin-left:4px; font-weight:normal; }
+.applications-view-label { display:flex; align-items:center; gap:6px; font-size:13px; color:#1a202c; font-weight:500; }
+
+.applications-toolbar { display:flex; align-items:center; justify-content:space-between; padding:10px 24px; background:#fff; border-bottom:1px solid #e8ecf2; flex-shrink:0; }
+.applications-toolbar-left { display:flex; align-items:center; gap:12px; }
+.applications-toolbar-right { display:flex; align-items:center; gap:6px; }
+.app-toolbar-btn { color:#4a5568 !important; font-size:13px !important; font-weight:500 !important; padding:4px 10px !important; border-radius:6px !important; display:flex !important; align-items:center; gap:6px; }
+.app-toolbar-btn:hover { background:#f4f0ff !important; color:var(--accent) !important; }
+.app-count-label { font-size:13px; color:#788599; }
+
+.applications-table { margin:16px 20px 24px; background:#fff; border:1px solid #e8ecf2; border-radius:8px; overflow:hidden; }
+.applications-table .ant-table { background:transparent; font-size:13px; }
+.applications-table .ant-table-thead > tr > th { background:#f8f9fa !important; color:#788599; font-weight:500; font-size:12px; border-bottom:1px solid #e8ecf2; padding:10px 16px !important; white-space:nowrap; }
+.applications-table .ant-table-tbody > tr > td { padding:10px 16px !important; border-bottom:1px solid #e8ecf2; color:#1a202c; white-space:nowrap; }
+.applications-table .ant-table-tbody > tr:hover > td { background:#fbfbfe !important; }
+
+/* Status Badges */
+.app-badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:500; white-space:nowrap; }
+.app-badge-waiting { background:#fef3c7; color:#b45309; }
+.app-badge-approving { background:#dbeafe; color:#1d4ed8; }
+.app-badge-approved { background:#d1fae5; color:#047857; }
+
+/* Approval Step Badge */
+.app-step-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500; background:#fef3c7; color:#b45309; }
+
+/* Creator Info */
+.app-creator { display:flex; align-items:center; gap:8px; }
+.app-avatar { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:600; }

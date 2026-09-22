@@ -1,0 +1,17 @@
+node_modules/
+.npm-cache/
+.next/
+dist/
+.dev-dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+.idea/
+*.iml
+backend/src/generated/

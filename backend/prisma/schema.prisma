@@ -1,0 +1,654 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+}
+
+enum EmployeeStatus {
+  WAITING
+  WORKING
+  TEMPORARY
+  MATERNITY_LEAVE
+  UNPAID_LEAVE
+  MILITARY_LEAVE
+  STUDY_LEAVE
+  SICK_LEAVE
+  STOP_WORKING
+}
+
+enum ApplicationStatus {
+  WAITING
+  APPROVING
+  APPROVED
+  NO_APPROVED
+  CANCELED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+}
+
+enum CatalogKind {
+  DEPARTMENT
+  POSITION
+  JOB_TITLE
+}
+
+model Employee {
+  id            String           @id @default(uuid()) @db.Char(36)
+  code          String           @unique @db.VarChar(50)
+  name          String           @db.VarChar(150)
+  gender        Gender?
+  birthday      DateTime?        @db.Date
+  email         String?          @db.VarChar(254)
+  phone         String?          @db.VarChar(30)
+  address       String?          @db.VarChar(500)
+  joinDate      DateTime?        @db.Date
+  status        EmployeeStatus   @default(WORKING)
+  departmentId  String?          @db.Char(36)
+  positionId    String?          @db.Char(36)
+  jobTitleId    String?          @db.Char(36)
+  department    EmployeeCatalog? @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  position      EmployeeCatalog? @relation("EmployeePosition", fields: [positionId], references: [id], onDelete: Restrict)
+  jobTitle      EmployeeCatalog? @relation("EmployeeJobTitle", fields: [jobTitleId], references: [id], onDelete: Restrict)
+  managerId     String?          @db.Char(36)
+  manager       Employee?        @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: Restrict)
+  directReports Employee[]       @relation("EmployeeManager")
+
+  syncCode             String?   @db.VarChar(50)
+  nationality          String?   @db.VarChar(50)
+  maritalStatus        String?   @db.VarChar(50)
+  religion             String?   @db.VarChar(50)
+  ethnicity            String?   @db.VarChar(50)
+  taxCode              String?   @db.VarChar(50)
+  militaryService      String?   @db.VarChar(50)
+  birthPlace           String?   @db.VarChar(200)
+  hometown             String?   @db.VarChar(200)
+  workType             String?   @db.VarChar(100)
+  officialContractDate DateTime? @db.Date
+  academicLevel        String?   @db.VarChar(100)
+  highSchoolLevel      String?   @db.VarChar(100)
+  major                String?   @db.VarChar(100)
+  experienceYears      Int?
+  permanentAddress     String?   @db.VarChar(500)
+  minWageZone          String?   @db.VarChar(100)
+  gpsLocation          String?   @db.VarChar(100)
+  salaryBase           Int?      @default(12500000)
+
+  identities       EmployeeIdentity[]
+  banks            EmployeeBank[]
+  workPermits      EmployeeWorkPermit[]
+  visas            EmployeeVisa[]
+  families         EmployeeFamily[]
+  educations       EmployeeEducation[]
+  partyHistories   EmployeePartyHistory[]
+  experiences      EmployeeExperience[]
+  certificates     EmployeeCertificate[]
+
+  version          Int                   @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  history          EmployeeHistory[]
+  user             User?
+  applications     Application[]
+  approvals        ApplicationApproval[] @relation("EmployeeApprovals")
+  shiftAssignments ShiftAssignment[]
+  attendanceLogs   AttendanceLog[]
+  payrollRecords   PayrollRecord[]
+  attendanceMeals  AttendanceMeal[]
+  autoTimekeepRules AutoTimekeepRule[]
+  shiftRegisters   ShiftRegister[]
+  rawLogs          BiometricRawLog[]
+  furloughBalances FurloughBalance[]
+
+  @@index([status, createdAt])
+  @@index([departmentId])
+  @@index([positionId])
+  @@index([jobTitleId])
+  @@index([managerId])
+}
+
+model EmployeeIdentity {
+  id         String    @id @default(uuid()) @db.Char(36)
+  employeeId String    @db.Char(36)
+  type       String    @db.VarChar(50)
+  identityNo String    @db.VarChar(50)
+  issueDate  DateTime? @db.Date
+  expiryDate DateTime? @db.Date
+  issuePlace String?   @db.VarChar(150)
+  frontImg   String?   @db.VarChar(500)
+  backImg    String?   @db.VarChar(500)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeBank {
+  id          String  @id @default(uuid()) @db.Char(36)
+  employeeId  String  @db.Char(36)
+  accountNo   String  @db.VarChar(50)
+  accountName String  @db.VarChar(150)
+  bankName    String  @db.VarChar(150)
+  branch      String? @db.VarChar(150)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeWorkPermit {
+  id         String    @id @default(uuid()) @db.Char(36)
+  employeeId String    @db.Char(36)
+  permitNo   String    @db.VarChar(50)
+  issueDate  DateTime? @db.Date
+  expiryDate DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeVisa {
+  id         String    @id @default(uuid()) @db.Char(36)
+  employeeId String    @db.Char(36)
+  visaNo     String    @db.VarChar(50)
+  issueDate  DateTime? @db.Date
+  expiryDate DateTime? @db.Date
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeFamily {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  employeeId         String    @db.Char(36)
+  relationship       String    @db.VarChar(50)
+  fullName           String    @db.VarChar(150)
+  birthday           DateTime? @db.Date
+  phone              String?   @db.VarChar(30)
+  identityNo         String?   @db.VarChar(50)
+  issueDate          DateTime? @db.Date
+  issuePlace         String?   @db.VarChar(150)
+  isDependent        Boolean   @default(false)
+  permanentAddress   String?   @db.VarChar(500)
+  temporaryAddress   String?   @db.VarChar(500)
+  frontImg           String?   @db.VarChar(500)
+  backImg            String?   @db.VarChar(500)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeEducation {
+  id               String    @id @default(uuid()) @db.Char(36)
+  employeeId       String    @db.Char(36)
+  fromDate         DateTime? @db.Date
+  toDate           DateTime? @db.Date
+  trainingType     String?   @db.VarChar(100)
+  major            String?   @db.VarChar(150)
+  academicLevel    String?   @db.VarChar(100)
+  trainingPlace    String?   @db.VarChar(150)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeePartyHistory {
+  id            String    @id @default(uuid()) @db.Char(36)
+  employeeId    String    @db.Char(36)
+  partyCardNo   String?   @db.VarChar(50)
+  partyForm     String?   @db.VarChar(100)
+  fromDate      DateTime? @db.Date
+  toDate        DateTime? @db.Date
+  joinPlace     String?   @db.VarChar(150)
+  transferPlace String?   @db.VarChar(150)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeExperience {
+  id             String    @id @default(uuid()) @db.Char(36)
+  employeeId     String    @db.Char(36)
+  fromMonth      DateTime? @db.Date
+  toMonth        DateTime? @db.Date
+  company        String?   @db.VarChar(150)
+  position       String?   @db.VarChar(100)
+  referenceName  String?   @db.VarChar(100)
+  referencePhone String?   @db.VarChar(30)
+  description    String?   @db.Text
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeCertificate {
+  id             String    @id @default(uuid()) @db.Char(36)
+  employeeId     String    @db.Char(36)
+  certificateNo  String?   @db.VarChar(50)
+  issuedBy       String?   @db.VarChar(150)
+  type           String?   @db.VarChar(100)
+  version        String?   @db.VarChar(50)
+  issueCount     String?   @db.VarChar(50)
+  validFrom      DateTime? @db.Date
+  validTo        DateTime? @db.Date
+  attachmentFile String?   @db.VarChar(500)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+
+model EmployeeCatalog {
+  id                  String            @id @default(uuid()) @db.Char(36)
+  kind                CatalogKind
+  code                String            @db.VarChar(50)
+  name                String            @db.VarChar(150)
+  active              Boolean           @default(true)
+  parentId            String?           @db.Char(36)
+  parent              EmployeeCatalog?  @relation("CatalogHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children            EmployeeCatalog[] @relation("CatalogHierarchy")
+  permissionStructure String?           @db.VarChar(50)
+  isManagementUnit    Boolean?          @default(false)
+  supervisorId        String?           @db.Char(36)
+  businessBlock       String?           @db.VarChar(100)
+  departmentType      String?           @db.VarChar(100)
+  description         String?           @db.Text
+  correspondingJobTitleId String?       @db.Char(36)
+  roleId              String?           @db.Char(36)
+  salaryFrom          Float?
+  salaryTo            Float?
+  creatorName         String?           @db.VarChar(100)
+  orderNumber         Int?              @default(1)
+  rankLevel           String?           @db.VarChar(50)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @default(now()) @updatedAt
+  departments         Employee[]        @relation("EmployeeDepartment")
+  positions           Employee[]        @relation("EmployeePosition")
+  jobTitles           Employee[]        @relation("EmployeeJobTitle")
+
+  @@unique([kind, code])
+}
+
+model EmployeeHistory {
+  id         String   @id @default(uuid()) @db.Char(36)
+  employeeId String   @db.Char(36)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  actorId    String?  @db.Char(36)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName  String   @db.VarChar(150)
+  action     String   @db.VarChar(20)
+  before     Json?
+  after      Json
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, createdAt])
+}
+
+model User {
+  id                 String            @id @default(uuid()) @db.Char(36)
+  username           String            @unique @db.VarChar(50)
+  displayName        String            @db.VarChar(150)
+  passwordHash       String            @db.VarChar(100)
+  mustChangePassword Boolean           @default(true)
+  status             UserStatus        @default(ACTIVE)
+  authVersion        Int               @default(0)
+  employeeId         String?           @unique @db.Char(36)
+  employee           Employee?         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  roles              UserRole[]
+  sessions           Session[]
+  employeeChanges    EmployeeHistory[]
+  notifications      Notification[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Char(36)
+  name        String           @unique @db.VarChar(80)
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  code        String           @id @db.VarChar(80)
+  description String           @db.VarChar(200)
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String @db.Char(36)
+  roleId String @db.Char(36)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId         String     @db.Char(36)
+  permissionCode String     @db.VarChar(80)
+  role           Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission     Permission @relation(fields: [permissionCode], references: [code], onDelete: Restrict)
+
+  @@id([roleId, permissionCode])
+  @@index([permissionCode])
+}
+
+model Session {
+  id            String         @id @default(uuid()) @db.Char(36)
+  userId        String         @db.Char(36)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client        String         @db.VarChar(10)
+  rememberMe    Boolean        @default(false)
+  authVersion   Int
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Char(36)
+  tokenHash String    @unique @db.Char(64)
+  sessionId String    @db.Char(36)
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([sessionId])
+}
+
+model Application {
+  id          String            @id @default(uuid()) @db.Char(36)
+  employeeId  String            @db.Char(36)
+  employee    Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type        String            @db.VarChar(50)
+  status      ApplicationStatus @default(WAITING)
+  reason      String?           @db.VarChar(255)
+  description String?           @db.Text
+  payload     Json
+  currentStep Int               @default(1)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  approvals ApplicationApproval[]
+
+  @@index([employeeId, createdAt])
+  @@index([type])
+  @@index([status])
+}
+
+model ApplicationApproval {
+  id            String         @id @default(uuid()) @db.Char(36)
+  applicationId String         @db.Char(36)
+  application   Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  step          Int
+  approverId    String?        @db.Char(36)
+  approver      Employee?      @relation("EmployeeApprovals", fields: [approverId], references: [id], onDelete: SetNull)
+  status        ApprovalStatus @default(PENDING)
+  comment       String?        @db.Text
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([applicationId, step])
+  @@index([approverId, status])
+}
+
+// -------------------------------------------------------------
+// ATTENDANCE & SHIFT MANAGEMENT
+// -------------------------------------------------------------
+
+model Shift {
+  id               String   @id @default(uuid()) @db.Char(36)
+  name             String   @db.VarChar(100)
+  code             String   @unique @db.VarChar(50)
+  startTime        String   @db.VarChar(10) // e.g., "08:00"
+  endTime          String   @db.VarChar(10) // e.g., "17:30"
+  breakStart       String?  @db.VarChar(10) // e.g., "12:00"
+  breakEnd         String?  @db.VarChar(10) // e.g., "13:30"
+  standardHours    Float    @default(8)
+  coefficient      Float    @default(1.0)
+  graceLateMinutes Int      @default(15)
+  color            String   @default("green") @db.VarChar(30)
+  description      String?  @db.VarChar(255)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  assignments ShiftAssignment[]
+}
+
+model ShiftAssignment {
+  id         String   @id @default(uuid()) @db.Char(36)
+  employeeId String   @db.Char(36)
+  shiftId    String   @db.Char(36)
+  date       DateTime @db.Date
+  status     String   @default("PENDING") @db.VarChar(20)
+  title      String?  @db.VarChar(150)
+  repeatType String?  @db.VarChar(50)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift    @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, date])
+  @@index([date])
+  @@index([title])
+}
+
+model AttendanceLog {
+  id               String    @id @default(uuid()) @db.Char(36)
+  employeeId       String    @db.Char(36)
+  date             DateTime  @db.Date
+  checkIn          DateTime?
+  checkOut         DateTime?
+  checkInLocation  String?   @db.VarChar(255)
+  checkOutLocation String?   @db.VarChar(255)
+  status           String    @default("PRESENT") @db.VarChar(20)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, date])
+}
+
+model TimesheetLock {
+  id        String   @id @default(uuid()) @db.Char(36)
+  month     String   @unique @db.VarChar(10) // "2026-09"
+  lockedAt  DateTime @default(now())
+  lockedBy  String?  @db.Char(36)
+  appsLocked Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// -------------------------------------------------------------
+// NOTIFICATIONS
+// -------------------------------------------------------------
+model Notification {
+  id      String  @id @default(uuid()) @db.Char(36)
+  userId  String  @db.Char(36)
+  title   String  @db.VarChar(255)
+  content String  @db.Text
+  isRead  Boolean @default(false)
+  link    String? @db.VarChar(500)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isRead])
+}
+
+// -------------------------------------------------------------
+// PAYROLL MANAGEMENT
+// -------------------------------------------------------------
+
+model PayrollTemplate {
+  id   String @id @default(uuid()) @db.Char(36)
+  name String @db.VarChar(150)
+
+  // JSON array defining columns and formulas
+  // e.g. [{ "id": "SALARY_TYPE_CB", "name": "Lương cơ bản", "type": "CURRENCY" }, { "id": "CAL_WORKDAY", "name": "Công làm việc", "type": "NUMBER" }]
+  columns Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payrolls Payroll[]
+}
+
+model Payroll {
+  id         String @id @default(uuid()) @db.Char(36)
+  name       String @db.VarChar(150)
+  month      String @db.VarChar(10) // "2026-09"
+  templateId String @db.Char(36)
+  status     String @default("DRAFT") // DRAFT, CALCULATED, APPROVED
+
+  template PayrollTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  records  PayrollRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([month])
+  @@index([templateId])
+}
+
+model PayrollRecord {
+  id         String @id @default(uuid()) @db.Char(36)
+  payrollId  String @db.Char(36)
+  employeeId String @db.Char(36)
+
+  // Dynamic payload of calculated values based on template columns
+  // e.g. { "SALARY_TYPE_CB": 5800000, "CAL_WORKDAY": 11.67, "NET_SALARY": 7500000 }
+  payload Json
+
+  payroll  Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([payrollId, employeeId])
+}
+
+// -------------------------------------------------------------
+// SUB-FUNCTIONS: MEAL, AUTO, SHIFT REG, BIOMETRIC, FURLOUGH, HOLIDAY
+// -------------------------------------------------------------
+
+model AttendanceMeal {
+  id         String   @id @default(uuid()) @db.Char(36)
+  employeeId String   @db.Char(36)
+  date       DateTime @db.Date
+  caCount    Int      @default(0)
+  otCount    Int      @default(0)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([employeeId, date])
+}
+
+model AutoTimekeepRule {
+  id         String    @id @default(uuid()) @db.Char(36)
+  employeeId String    @db.Char(36)
+  startDate  DateTime  @db.Date
+  endDate    DateTime? @db.Date
+  status     String    @default("ACTIVE") @db.VarChar(20)
+  note       String?   @db.Text
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([employeeId, status])
+}
+
+model ShiftRegister {
+  id             String   @id @default(uuid()) @db.Char(36)
+  employeeId     String   @db.Char(36)
+  type           String   @db.VarChar(50)
+  date           DateTime @db.Date
+  currentShiftId String?  @db.Char(36)
+  targetShiftId  String?  @db.Char(36)
+  reason         String?  @db.Text
+  status         String   @default("WAITING") @db.VarChar(20)
+  approverId     String?  @db.Char(36)
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([employeeId, date])
+}
+
+model BiometricDevice {
+  id             String   @id @default(uuid()) @db.Char(36)
+  title          String   @db.VarChar(150)
+  machineType    String   @db.VarChar(100)
+  ipMachine      String   @db.VarChar(100)
+  serialNumber   String   @db.VarChar(100)
+  location       String   @db.VarChar(200)
+  directionType  String   @default("ALL") @db.VarChar(20)
+  status         String   @default("UPDATED") @db.VarChar(20)
+  lastTimeUpdate DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model BiometricRawLog {
+  id         String   @id @default(uuid()) @db.Char(36)
+  employeeId String   @db.Char(36)
+  timestamp  DateTime
+  fromType   String   @db.VarChar(50)
+  location   String?  @db.VarChar(255)
+  deviceId   String?  @db.VarChar(100)
+  verifyMode String?  @db.VarChar(100)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, timestamp])
+}
+
+model FurloughBalance {
+  id                  String   @id @default(uuid()) @db.Char(36)
+  employeeId          String   @db.Char(36)
+  year                Int
+  yearOpen            Float    @default(12)
+  yearUsed            Float    @default(0)
+  seniorityOpen       Float    @default(0)
+  accumulationOpen    Float    @default(0)
+  accumulationExpired Float    @default(0)
+  employee            Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([employeeId, year])
+}
+
+model HolidayCalendar {
+  id         String   @id @default(uuid()) @db.Char(36)
+  name       String   @db.VarChar(150)
+  type       String   @db.VarChar(50)
+  startDate  DateTime @db.Date
+  endDate    DateTime @db.Date
+  totalDays  Int      @default(1)
+  hasSalary  Boolean  @default(true)
+  salaryRate String   @db.VarChar(100)
+  symbol     String   @default("L") @db.VarChar(10)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+

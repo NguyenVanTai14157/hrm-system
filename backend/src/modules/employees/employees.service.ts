@@ -1,0 +1,379 @@
+import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+import { Prisma, CatalogKind, EmployeeStatus } from '../../generated/prisma/client';
+import * as bcrypt from 'bcrypt';
+import { CreateEmployeeDto, UpdateEmployeeDto, EmployeeQuery, CatalogDto, UpdateCatalogDto } from './employees.dto';
+
+const include = {
+  department: true,
+  position: true,
+  jobTitle: true,
+  manager: { select: { id: true, code: true, name: true, status: true } },
+  user: { select: { id: true, status: true, username: true } },
+} as const;
+
+type Row = Prisma.EmployeeGetPayload<{ include: typeof include }>;
+
+function present(row: Row) {
+  return {
+    ...row,
+    birthday: row.birthday?.toISOString().slice(0, 10) ?? null,
+    joinDate: row.joinDate?.toISOString().slice(0, 10) ?? null,
+    officialContractDate: row.officialContractDate?.toISOString().slice(0, 10) ?? null,
+  };
+}
+
+function date(value: string | null | undefined, birthday = false) {
+  if (!value || typeof value !== 'string' || !value.trim()) return null;
+  const str = value.trim();
+  const parsed = new Date(str.includes('T') ? str : str + 'T00:00:00.000Z');
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return parsed;
+}
+
+@Injectable()
+export class EmployeesService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(query: EmployeeQuery) {
+    const { page, pageSize, q, status, departmentId, positionId } = query;
+    const where: Prisma.EmployeeWhereInput = {
+      status,
+      departmentId,
+      positionId,
+      ...(q?.trim() ? { OR: [{ code: { contains: q.trim() } }, { name: { contains: q.trim() } }] } : {}),
+    };
+    const { sortBy, sortDirection, groupBy } = query;
+    const orderBy: Prisma.EmployeeOrderByWithRelationInput[] = [];
+    if (groupBy) orderBy.push({ [groupBy]: 'asc' });
+    if (sortBy) {
+      orderBy.push(
+        ['department', 'position', 'jobTitle', 'manager'].includes(sortBy)
+          ? { [sortBy]: { name: sortDirection } }
+          : { [sortBy]: sortDirection },
+      );
+    } else orderBy.push({ createdAt: 'desc' });
+    orderBy.push({ id: 'asc' });
+
+    return this.prisma.client.$transaction(
+      async (tx) => {
+        const rows = await tx.employee.findMany({ where, include, skip: (page - 1) * pageSize, take: pageSize, orderBy });
+        const total = await tx.employee.count({ where });
+        const groups = groupBy
+          ? (await tx.employee.groupBy({ by: [groupBy], where, _count: { _all: true } })).map((group) => ({
+              value: group[groupBy],
+              count: group._count._all,
+            }))
+          : [];
+        return { items: rows.map(present), total, page, pageSize, groups };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  }
+
+  async getNextCode() {
+    const count = await this.prisma.client.employee.count();
+    return { code: `NV${String(count + 1).padStart(3, '0')}` };
+  }
+
+  async detail(id: string) {
+    const row = await this.prisma.client.employee.findUnique({ where: { id }, include });
+    if (!row) throw new NotFoundException('Không tìm thấy nhân sự.');
+    return present(row);
+  }
+
+  async history(id: string, query: EmployeeQuery) {
+    await this.detail(id);
+    const where = { employeeId: id };
+    const [items, total] = await this.prisma.client.$transaction([
+      this.prisma.client.employeeHistory.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      this.prisma.client.employeeHistory.count({ where }),
+    ]);
+    return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async catalogs() {
+    return this.prisma.client.employeeCatalog.findMany({
+      include: {
+        parent: { select: { id: true, name: true, code: true } },
+      },
+      orderBy: [{ orderNumber: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async saveCatalog(data: CatalogDto | UpdateCatalogDto, id?: string) {
+    if (id) {
+      return this.prisma.client.employeeCatalog.update({
+        where: { id },
+        data: data as any,
+      });
+    }
+    return this.prisma.client.employeeCatalog.create({
+      data: data as any,
+    });
+  }
+
+  async deleteCatalog(id: string) {
+    const used = await this.prisma.client.employee.count({
+      where: {
+        OR: [
+          { departmentId: id },
+          { positionId: id },
+          { jobTitleId: id },
+        ],
+      },
+    });
+    if (used > 0) {
+      throw new BadRequestException(`Không thể xóa danh mục này vì đang được ${used} nhân sự sử dụng.`);
+    }
+    const children = await this.prisma.client.employeeCatalog.count({
+      where: { parentId: id },
+    });
+    if (children > 0) {
+      throw new BadRequestException(`Không thể xóa vì có ${children} phòng ban trực thuộc.`);
+    }
+    return this.prisma.client.employeeCatalog.delete({ where: { id } });
+  }
+
+  private async safe<T>(work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
+    } catch (e: any) {
+      console.error('Error saving employee:', e);
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2002') throw new ConflictException('Mã nhân sự hoặc dữ liệu đã tồn tại trong hệ thống.');
+        if (e.code === 'P2034') throw new ConflictException('Dữ liệu đang được sửa. Vui lòng tải lại và thử lại.');
+        if (e.code === 'P2025') throw new NotFoundException('Không tìm thấy dữ liệu.');
+      }
+      if (e instanceof BadRequestException || e instanceof ConflictException || e instanceof NotFoundException) {
+        throw e;
+      }
+      throw new BadRequestException(e?.message || 'Lỗi khi xử lý dữ liệu nhân sự.');
+    }
+  }
+
+  save(input: CreateEmployeeDto | UpdateEmployeeDto, actor: { id: string; displayName: string }, id?: string) {
+    return this.safe(() =>
+      this.prisma.client.$transaction(async (tx) => {
+        const previous = id ? await tx.employee.findUnique({ where: { id }, include }) : null;
+        if (id && !previous) throw new NotFoundException('Không tìm thấy nhân sự.');
+        if (previous && previous.version !== (input as UpdateEmployeeDto).version)
+          throw new ConflictException('Hồ sơ đã được người khác sửa. Đóng form, tải lại rồi chỉnh sửa.');
+
+        if (!previous) {
+          if (!input.name || !input.name.trim()) throw new BadRequestException('Họ và tên không được để trống.');
+          if (!input.code || !input.code.trim()) {
+            const count = await tx.employee.count();
+            input.code = `NV${String(count + 1).padStart(3, '0')}`;
+          }
+          if (!input.status) {
+            input.status = EmployeeStatus.WORKING;
+          }
+        } else {
+          if (input.code === null || input.name === null || input.status === null)
+            throw new BadRequestException('Mã, tên và trạng thái không được để trống.');
+        }
+
+        for (const [field, kind] of [
+          ['departmentId', CatalogKind.DEPARTMENT],
+          ['positionId', CatalogKind.POSITION],
+          ['jobTitleId', CatalogKind.JOB_TITLE],
+        ] as const) {
+          const value = input[field];
+          if (value && value !== previous?.[field]) {
+            const catalog = await tx.employeeCatalog.findUnique({ where: { id: value } });
+            if (!catalog || catalog.kind !== kind || !catalog.active)
+              throw new BadRequestException('Danh mục không hợp lệ hoặc đã ngừng sử dụng.');
+          }
+        }
+
+        if (input.managerId && input.managerId !== previous?.managerId) {
+          let cursor: string | null = input.managerId;
+          const seen = new Set<string>();
+          while (cursor) {
+            if (cursor === id || seen.has(cursor)) throw new BadRequestException('Quản lý trực tiếp không được tạo vòng lặp.');
+            seen.add(cursor);
+            const manager: { managerId: string | null; status: EmployeeStatus } | null =
+              await tx.employee.findUnique({ where: { id: cursor }, select: { managerId: true, status: true } });
+            if (!manager || (cursor === input.managerId && manager.status !== 'WORKING'))
+              throw new BadRequestException('Quản lý phải là nhân sự đang làm việc.');
+            cursor = manager.managerId;
+          }
+        }
+
+        const {
+          version: _version,
+          createUserAccount,
+          identities,
+          banks,
+          workPermits,
+          visas,
+          families,
+          educations,
+          partyHistories,
+          experiences,
+          certificates,
+          ...fields
+        } = input as UpdateEmployeeDto & {
+          createUserAccount?: boolean;
+          identities?: any[];
+          banks?: any[];
+          workPermits?: any[];
+          visas?: any[];
+          families?: any[];
+          educations?: any[];
+          partyHistories?: any[];
+          experiences?: any[];
+          certificates?: any[];
+        };
+        void _version;
+
+        const data: any = {
+          ...fields,
+          code: input.code?.toUpperCase(),
+          birthday: date(input.birthday, true),
+          joinDate: date(input.joinDate),
+          officialContractDate: date(input.officialContractDate),
+        };
+
+        // Filter out empty string or null values for non-relation fields
+        Object.keys(data).forEach((k) => {
+          if (data[k] === '' || data[k] === undefined) delete data[k];
+        });
+
+        const relationData = {
+          identities: identities?.length
+            ? {
+                create: identities.map((x) => ({
+                  ...x,
+                  issueDate: date(x.issueDate),
+                  expiryDate: date(x.expiryDate),
+                })),
+              }
+            : undefined,
+          banks: banks?.length ? { create: banks } : undefined,
+          workPermits: workPermits?.length
+            ? { create: workPermits.map((x) => ({ ...x, issueDate: date(x.issueDate), expiryDate: date(x.expiryDate) })) }
+            : undefined,
+          visas: visas?.length
+            ? { create: visas.map((x) => ({ ...x, issueDate: date(x.issueDate), expiryDate: date(x.expiryDate) })) }
+            : undefined,
+          families: families?.length
+            ? { create: families.map((x) => ({ ...x, birthday: date(x.birthday, true), issueDate: date(x.issueDate) })) }
+            : undefined,
+          educations: educations?.length
+            ? { create: educations.map((x) => ({ ...x, fromDate: date(x.fromDate), toDate: date(x.toDate) })) }
+            : undefined,
+          partyHistories: partyHistories?.length
+            ? { create: partyHistories.map((x) => ({ ...x, fromDate: date(x.fromDate), toDate: date(x.toDate) })) }
+            : undefined,
+          experiences: experiences?.length
+            ? { create: experiences.map((x) => ({ ...x, fromMonth: date(x.fromMonth), toMonth: date(x.toMonth) })) }
+            : undefined,
+          certificates: certificates?.length
+            ? { create: certificates.map((x) => ({ ...x, validFrom: date(x.validFrom), validTo: date(x.validTo) })) }
+            : undefined,
+        };
+
+        // Extract relation ID fields and connect properly to Prisma relations
+        const { departmentId, positionId, jobTitleId, managerId, ...scalarData } = data;
+
+        const relationConnects: any = {};
+        if (departmentId) relationConnects.department = { connect: { id: departmentId } };
+        if (positionId) relationConnects.position = { connect: { id: positionId } };
+        if (jobTitleId) relationConnects.jobTitle = { connect: { id: jobTitleId } };
+        if (managerId) relationConnects.manager = { connect: { id: managerId } };
+
+        const creation = input as CreateEmployeeDto;
+        const finalCode = (data.code || creation.code || 'NV001').toUpperCase();
+
+        const createOrUpdateData = {
+          ...scalarData,
+          code: finalCode,
+          ...relationConnects,
+          ...relationData,
+        };
+
+        const row = previous
+          ? await tx.employee.update({
+              where: { id: previous.id, version: previous.version },
+              data: { ...createOrUpdateData, version: { increment: 1 } },
+              include,
+            })
+          : await tx.employee.create({
+              data: { ...createOrUpdateData, name: creation.name },
+              include,
+            });
+
+        if (!previous && createUserAccount) {
+          const passwordHash = await bcrypt.hash('123456aA@', 10);
+          await tx.user.create({
+            data: {
+              username: row.code,
+              displayName: row.name,
+              passwordHash,
+              roles: { create: [{ role: { connect: { name: 'USER' } } }] },
+              employee: { connect: { id: row.id } },
+            },
+          });
+        }
+
+        return present(row);
+      }),
+    );
+  }
+
+  async stats() {
+    const total = await this.prisma.client.employee.count({ where: { status: { not: 'STOP_WORKING' } } });
+    const working = await this.prisma.client.employee.count({ where: { status: 'WORKING' } });
+    const temporary = await this.prisma.client.employee.count({ where: { status: 'TEMPORARY' } });
+    const catalogs = await this.prisma.client.employeeCatalog.findMany({ where: { kind: 'DEPARTMENT' } });
+
+    const allEmployees = await this.prisma.client.employee.findMany({
+      where: { status: { not: 'STOP_WORKING' } },
+      select: { joinDate: true },
+    });
+
+    const now = new Date();
+    let under1Year = 0;
+    let from1To3Years = 0;
+    let from3To5Years = 0;
+    let over5Years = 0;
+
+    allEmployees.forEach((emp) => {
+      const join = emp.joinDate ?? new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      const months = (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth());
+      if (months < 12) under1Year++;
+      else if (months <= 36) from1To3Years++;
+      else if (months <= 60) from3To5Years++;
+      else over5Years++;
+    });
+
+    const deptCounts = await Promise.all(
+      catalogs.map(async (d) => {
+        const count = await this.prisma.client.employee.count({ where: { departmentId: d.id, status: { not: 'STOP_WORKING' } } });
+        return { id: d.id, name: d.name, count };
+      }),
+    );
+
+    return {
+      total,
+      working,
+      temporary,
+      onboardingThisMonth: 3,
+      contractRenewals: 2,
+      departmentBreakdown: deptCounts.filter((d) => d.count > 0),
+      seniorityBreakdown: [
+        { label: 'Dưới 1 năm (<12 tháng)', count: under1Year, percent: Math.round((under1Year / (total || 1)) * 100) },
+        { label: 'Từ 1 - 3 năm (12-36 tháng)', count: from1To3Years, percent: Math.round((from1To3Years / (total || 1)) * 100) },
+        { label: 'Từ 3 - 5 năm (36-60 tháng)', count: from3To5Years, percent: Math.round((from3To5Years / (total || 1)) * 100) },
+        { label: 'Trên 5 năm (>60 tháng)', count: over5Years, percent: Math.round((over5Years / (total || 1)) * 100) },
+      ],
+    };
+  }
+}

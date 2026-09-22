@@ -1,0 +1,84 @@
+/* features/payroll/payroll.css */
+.payroll-container { padding: 24px; background: #f8f9fa; min-height: 100%; }
+
+.pr-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 16px; }
+.pr-header h1 { font-size: 20px; font-weight: 700; color: #1a202c; margin: 0; }
+.pr-header p { font-size: 13px; color: #788599; margin: 4px 0 0 0; }
+.pr-header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+.pr-month-nav { display: flex; align-items: center; gap: 8px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px 8px; background: #fff; }
+.pr-nav-btn { background: none; border: none; cursor: pointer; font-size: 20px; color: #6b7280; padding: 0 4px; line-height: 1; transition: color 0.15s; }
+.pr-nav-btn:hover { color: #111827; }
+.pr-month-label { font-size: 13px; font-weight: 600; color: #111827; min-width: 110px; text-align: center; }
+
+/* Summary cards */
+.pr-stats { display: flex; gap: 12px; margin-bottom: 20px; }
+.pr-stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 20px; flex: 1; min-width: 150px; }
+.pr-stat-card .label { font-size: 11px; color: #788599; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.pr-stat-card .value { font-size: 20px; font-weight: 700; color: #111827; margin-top: 4px; }
+.pr-stat-card.purple .value { color: #6d28d9; }
+.pr-stat-card.green .value { color: #15803d; }
+.pr-stat-card.blue .value { color: #1d4ed8; }
+
+/* Payroll list */
+.pr-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.pr-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s; }
+.pr-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: #c7d2fe; }
+.pr-card.active { border-color: #3b82f6; box-shadow: 0 0 0 2px #bfdbfe; }
+.pr-card-info { display: flex; align-items: center; gap: 12px; }
+.pr-card-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #6366f1); display: flex; align-items: center; justify-content: center; }
+.pr-card-icon svg { color: white; }
+.pr-card-name { font-size: 14px; font-weight: 600; color: #111827; }
+.pr-card-meta { font-size: 12px; color: #788599; margin-top: 2px; }
+.pr-card-right { display: flex; align-items: center; gap: 12px; }
+.pr-card-amount { font-size: 16px; font-weight: 700; color: #111827; }
+
+/* Status badge */
+.pr-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.pr-status-draft { background: #f3f4f6; color: #6b7280; }
+.pr-status-calculated { background: #dbeafe; color: #1d4ed8; }
+.pr-status-approved { background: #dcfce7; color: #15803d; }
+
+/* Create payroll area */
+.pr-create-area { background: #fff; border: 2px dashed #e5e7eb; border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pr-create-area:hover { border-color: #93c5fd; background: #eff6ff; }
+.pr-create-icon { font-size: 32px; color: #9ca3af; margin-bottom: 8px; }
+.pr-create-title { font-size: 15px; font-weight: 600; color: #374151; }
+.pr-create-desc { font-size: 13px; color: #9ca3af; margin-top: 4px; }
+
+/* Records table */
+.pr-records-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+.pr-records-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
+.pr-records-title { font-size: 15px; font-weight: 600; color: #111827; }
+
+.pr-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.pr-table th { padding: 10px 14px; background: #f9fafb; font-weight: 600; color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e5e7eb; text-align: left; }
+.pr-table th:last-child, .pr-table td:last-child { text-align: right; }
+.pr-table td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; color: #374151; }
+.pr-table tbody tr:hover td { background: #f9fafb; }
+.pr-table .pr-net { font-weight: 700; color: #111827; font-size: 14px; }
+.pr-table .pr-positive { color: #15803d; }
+.pr-table .pr-negative { color: #dc2626; }
+
+/* Buttons */
+.pr-btn-primary { padding: 8px 16px; background: #3b82f6; color: #fff; font-size: 13px; font-weight: 500; border: none; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.pr-btn-primary:hover { background: #2563eb; }
+.pr-btn-secondary { padding: 8px 16px; background: #fff; color: #374151; font-size: 13px; font-weight: 500; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.pr-btn-secondary:hover { background: #f9fafb; }
+.pr-btn-success { padding: 8px 16px; background: #16a34a; color: #fff; font-size: 13px; font-weight: 500; border: none; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.pr-btn-success:hover { background: #15803d; }
+
+/* Loading */
+.pr-loading { display: flex; align-items: center; justify-content: center; gap: 12px; height: 250px; color: #788599; font-size: 14px; }
+.pr-spinner { width: 20px; height: 20px; border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: pr-spin 0.7s linear infinite; }
+@keyframes pr-spin { to { transform: rotate(360deg); } }
+
+/* Modal */
+.pr-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.pr-modal { background: #fff; border-radius: 12px; padding: 24px; min-width: 420px; max-width: 500px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+.pr-modal h2 { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 20px 0; }
+.pr-modal-row { margin-bottom: 14px; }
+.pr-modal-row label { display: block; font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.pr-modal-row input, .pr-modal-row select { width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; color: #111827; outline: none; box-sizing: border-box; }
+.pr-modal-row input:focus, .pr-modal-row select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px #bfdbfe; }
+.pr-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
