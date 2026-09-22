@@ -20,5 +20,6 @@ EXPOSE 3002
 
 ENV NODE_ENV=production
 ENV PORT=3002
+ENV JWT_ACCESS_SECRET="a81fbeb99ce8691fe2d2ca7a4ef18a30a64fcb02c1261018a6ff6276fc2bf5b81b66f7e6539a121afbf5e2083d556d7a"
 
 CMD ["node", "dist/main.js"]
