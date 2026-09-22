@@ -14,7 +14,7 @@ COPY . .
 
 ENV DATABASE_URL="mysql://dummy:dummy@localhost:3306/dummy"
 RUN npx prisma generate
-RUN npm run build
+RUN npx nest build
 
 EXPOSE 3002
 
