@@ -8,7 +8,7 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN npm install
+RUN npm ci --no-audit || npm install --no-audit
 
 COPY . .
 
