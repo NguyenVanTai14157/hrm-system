@@ -2,20 +2,19 @@
 
 **Tiếp nhận dự án:** đọc [trạng thái hiện tại](docs/00-project-status.md) và [nhật ký bàn giao](docs/08-handoff-log.md) trước khi sửa code. Cuối mỗi lượt làm, cập nhật hai file này để người/AI tiếp theo tiếp tục đúng tiến độ.
 
-Hệ thống HRM gồm admin-web, client-web và backend NestJS dùng MySQL. Đã có đăng nhập username/mật khẩu, refresh phiên, đổi mật khẩu và đăng xuất. Đã triển khai [Nhân sự MVP](docs/10-employees-mvp.md) với API/MySQL thật; 7 module còn lại là khung.
+Hệ thống HRM gồm `admin-web` (tích hợp Cổng quản trị và Cổng nhân viên di động `/me`) và `backend` NestJS dùng MySQL. Đã có đăng nhập username/mật khẩu, refresh phiên, đổi mật khẩu và đăng xuất.
 
 ## Cấu trúc
 
-- admin-web/: Next.js, React, TypeScript, Ant Design, Tailwind — cổng 3000.
-- client-web/: cùng stack — cổng nhân viên 3001.
-- backend/: NestJS, Prisma 7, MySQL, JWT, bcrypt — cổng 3002.
-- docs/: yêu cầu, thiết kế, kế hoạch.
+- **admin-web/**: Next.js 16, React 19, TypeScript, Ant Design — Cổng quản trị (`/hrm`) và Cổng nhân viên di động (`/me`) chạy tại cổng **3000**.
+- **backend/**: NestJS 11, Prisma 7, MySQL, JWT, bcrypt — API chạy tại cổng **3002**.
+- **docs/**: Yêu cầu, thiết kế, kế hoạch và tài liệu bàn giao.
 
-Định hướng web app/PWA; đã bỏ Flutter/mobile. Chưa cấu hình manifest/service worker/offline.
+Định hướng Web App / PWA cho nhân viên mobile; đã loại bỏ workspace `client-web` riêng biệt để hợp nhất toàn bộ cổng nhân viên vào `admin-web/src/app/me` và `admin-web/src/features/personal`.
 
 ## Chạy trên máy hiện tại
 
-Mở ba terminal. Trong mỗi thư mục dưới đây, chạy npm.cmd run dev:
+Mở hai terminal:
 
 ```powershell
 cd D:\hrm-system\backend
@@ -27,19 +26,11 @@ cd D:\hrm-system\admin-web
 npm.cmd run dev
 ```
 
-```powershell
-cd D:\hrm-system\client-web
-npm.cmd run dev
-```
-
-Hoặc tại root chạy lần lượt dev:backend, dev:admin, dev:client trong ba terminal.
-
-Backend dev biên dịch vào .dev-dist; build biên dịch vào dist để không xóa đầu ra của tiến trình dev. Nếu chạy production bằng npm.cmd start, cần chạy npm.cmd run build trong backend trước. Không mở hai tiến trình dev cho cùng một ứng dụng.
-
-- Admin: http://localhost:3000/login
-- Client: http://localhost:3001/login
-- Swagger: http://localhost:3002/api/docs
-- Health: http://localhost:3002/api/v1/health
+- **Cổng Quản trị / Nhân viên:** http://localhost:3000/login
+  - Tài khoản Admin đăng nhập sẽ vào Cổng Quản Trị: `http://localhost:3000/`
+  - Tài khoản Nhân viên đăng nhập sẽ tự động vào Cổng Di động: `http://localhost:3000/me`
+- **Swagger Docs:** http://localhost:3002/api/docs
+- **Health Check:** http://localhost:3002/api/v1/health
 
 **Tài khoản ban đầu:** xem backend/.env.bootstrap trên máy. File không đưa lên Git. Lần đầu phải đổi mật khẩu. Mật khẩu MySQL khác mật khẩu HRM. Sau khi đổi mật khẩu, mật khẩu trong file bootstrap không còn dùng đăng nhập được.
 

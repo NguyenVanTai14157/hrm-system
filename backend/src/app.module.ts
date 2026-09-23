@@ -10,8 +10,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { UsersModule } from './modules/users/users.module';
 import { MailModule } from './modules/mail/mail.module';
+import { MeModule } from './modules/me/me.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }), HealthModule, AuthModule, EmployeesModule, ApplicationsModule, AttendanceModule, NotificationsModule, PayrollModule, UsersModule, MailModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }), HealthModule, AuthModule, EmployeesModule, ApplicationsModule, AttendanceModule, NotificationsModule, PayrollModule, UsersModule, MailModule, MeModule],
 })
 export class AppModule {}

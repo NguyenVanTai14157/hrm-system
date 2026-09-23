@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma, ApplicationStatus } from '../../generated/prisma/client';
 
@@ -191,12 +191,62 @@ export class ApplicationsService {
       };
     });
 
+    // 3. Delegated / Followed tasks (Việc bạn giao, theo dõi)
+    let delegatedWhere: Prisma.ApplicationWhereInput = {};
+    if (employeeId) {
+      delegatedWhere = {
+        OR: [
+          { employee: { managerId: employeeId } },
+          { approvals: { some: { approverId: employeeId } } },
+        ],
+      };
+    }
+    const delegatedApps = employeeId
+      ? await this.prisma.client.application.findMany({
+          where: delegatedWhere,
+          include: {
+            employee: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                department: { select: { id: true, name: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        })
+      : [];
+
+    const delegated = delegatedApps.map((app) => ({
+      id: app.id,
+      code: app.id.slice(0, 8).toUpperCase(),
+      type: app.type,
+      reason:
+        app.reason ||
+        (app.payload as any)?.reason ||
+        (app.payload as any)?.note ||
+        app.description ||
+        app.type,
+      applicant: {
+        id: app.employee.id,
+        name: app.employee.name,
+        code: app.employee.code,
+        department: app.employee.department?.name || 'Văn phòng',
+      },
+      createdAt: app.createdAt.toISOString(),
+      status: app.status,
+    }));
+
     return {
       toDoList,
       myRequests,
+      delegated,
       summary: {
         toDoCount: toDoList.length,
         myRequestsCount: myRequests.length,
+        delegatedCount: delegated.length,
       },
     };
   }
@@ -305,7 +355,7 @@ export class ApplicationsService {
     const app = await this.prisma.client.application.findUnique({
       where: { id },
       include: {
-        employee: { select: { id: true, code: true, name: true, department: true, position: true } },
+        employee: { select: { id: true, code: true, name: true, managerId: true, department: true, position: true } },
         approvals: { include: { approver: { select: { name: true } } }, orderBy: { step: 'asc' } },
       },
     });
@@ -317,13 +367,25 @@ export class ApplicationsService {
     const app = await this.findOne(id);
     const totalSteps = app.approvals.length || 1;
 
+    // 1. Authorization check: verify approver is designated for the current step or is manager / bypass
+    if (!isBypass) {
+      const currentApproval = app.approvals.find((a) => a.step === app.currentStep);
+      if (currentApproval && currentApproval.approverId) {
+        const isDesignatedApprover = currentApproval.approverId === approverId;
+        const isManager = app.employee?.managerId === approverId;
+        if (!isDesignatedApprover && !isManager) {
+          throw new ForbiddenException('Bạn không có quyền phê duyệt hoặc từ chối đơn này ở bước hiện tại.');
+        }
+      }
+    }
+
     let finalStatus: ApplicationStatus = 'APPROVED';
     let nextStep = app.currentStep;
 
     if (status === 'REJECTED') {
       finalStatus = 'NO_APPROVED';
       await this.prisma.client.applicationApproval.updateMany({
-        where: { applicationId: id },
+        where: { applicationId: id, step: app.currentStep },
         data: { status: 'REJECTED', comment: comment || 'Đơn bị từ chối' },
       });
     } else if (isBypass) {

@@ -197,7 +197,7 @@ export function TimesheetScreen() {
           <button className="ts-action-btn" onClick={() => message.info('Thêm nhân sự vào bảng chấm công')}>👤+ Thêm người</button>
           <button className="ts-action-btn primary" onClick={() => fetchTimesheet(month)}>⚡ Tính toán</button>
           <button className="ts-action-btn">🕒 Lịch sử</button>
-          <button className="ts-action-btn">⚙️ Cài đặt</button>
+          <a className="ts-action-btn" href="/hrm/attendance/settings">⚙️ Cài đặt</a>
         </div>
       </div>
 

@@ -33,5 +33,10 @@ class CatalogController {
 }
 import { UsersModule } from '../users/users.module';
 
-@Module({imports:[AuthModule, UsersModule],controllers:[EmployeesController,CatalogController],providers:[EmployeesService]})
+@Module({
+  imports: [AuthModule, UsersModule],
+  controllers: [EmployeesController, CatalogController],
+  providers: [EmployeesService],
+  exports: [EmployeesService],
+})
 export class EmployeesModule {}

@@ -1,9 +1,40 @@
 import { Controller, Get, Post, Put, Delete, Query, Body, Param } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RequirePermissions } from '../auth/auth.decorators';
 import { AttendanceService } from './attendance.service';
 
+@ApiTags('Attendance Admin')
+@ApiBearerAuth()
+@RequirePermissions('admin.access')
 @Controller('attendance')
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
+
+  @Get('settings/gps')
+  getGpsSettings() { return this.attendanceService.getGpsSettings(); }
+
+  @Post('settings/gps')
+  createGpsSettings(@Body() body: { rows: Record<string, unknown>[] }) {
+    return this.attendanceService.saveGpsSettings(body.rows);
+  }
+
+  @Put('settings/gps/:id')
+  updateGpsSettings(@Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.attendanceService.saveGpsSettings([body], id);
+  }
+
+  @Post('settings/shifts')
+  createShiftSettings(@Body() body: Record<string, unknown>) {
+    return this.attendanceService.saveShiftSettings(body);
+  }
+
+  @Put('settings/shifts/:id')
+  updateShiftSettings(@Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.attendanceService.saveShiftSettings(body, id);
+  }
+
+  @Get('settings/shifts')
+  getShiftSettings() { return this.attendanceService.getShifts(); }
 
   @Get('stats')
   async getStats() {

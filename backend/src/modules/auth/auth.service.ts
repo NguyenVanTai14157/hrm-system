@@ -16,9 +16,6 @@ export class AuthService {
   constructor(private db: PrismaService, private jwt: JwtService, private config: ConfigService) {}
   private checkAccess(user: AuthUser, client: ClientApp) {
     if (user.status !== 'ACTIVE') throw invalid();
-    if (client === 'admin' && !permissionsOf(user).includes('admin.access')) {
-      throw new ForbiddenException('Tài khoản không có quyền truy cập trang quản trị.');
-    }
   }
   private async issue(tx: Prisma.TransactionClient, user: AuthUser, client: ClientApp, rememberMe = false) {
     const raw = freshToken();
@@ -36,32 +33,6 @@ export class AuthService {
     });
     return { accessToken, expiresIn: 900, user: publicUser(user), refreshToken: raw, refreshExpiresAt: session.expiresAt, rememberMe: session.rememberMe };
   }
-  private async ensureAdminPermission(user: AuthUser): Promise<AuthUser> {
-    if (user.status !== 'ACTIVE') return user;
-    if (!permissionsOf(user).includes('admin.access')) {
-      const primaryRole = user.roles[0]?.roleId;
-      if (primaryRole) {
-        await this.db.client.permission.upsert({
-          where: { code: 'admin.access' },
-          update: {},
-          create: { code: 'admin.access', description: 'Truy cập hệ thống HRM' },
-        }).catch(() => {});
-
-        await this.db.client.rolePermission.upsert({
-          where: { roleId_permissionCode: { roleId: primaryRole, permissionCode: 'admin.access' } },
-          update: {},
-          create: { roleId: primaryRole, permissionCode: 'admin.access' },
-        }).catch(() => {});
-
-        const updated = await this.db.client.user.findUnique({
-          where: { id: user.id },
-          include: userInclude,
-        });
-        if (updated) return updated;
-      }
-    }
-    return user;
-  }
 
   async login(username: string, password: string, client: ClientApp, rememberMe = false) {
     let user = await this.db.client.user.findUnique({ where: { username: username.toLowerCase() }, include: userInclude });
@@ -69,7 +40,6 @@ export class AuthService {
     const fallback = '$2b$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW';
     const valid = await verifyPassword(password, user?.passwordHash ?? fallback);
     if (!user || !valid) throw invalid();
-    user = await this.ensureAdminPermission(user);
     this.checkAccess(user, client);
     const { session, raw } = await this.db.client.$transaction(async (tx) => {
       // Recheck after bcrypt so lock/reset during login cannot create a usable old session.

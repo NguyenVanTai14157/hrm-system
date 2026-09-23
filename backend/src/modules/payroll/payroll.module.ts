@@ -6,6 +6,7 @@ import { AttendanceService } from '../attendance/attendance.service';
 
 @Module({
   providers: [PayrollService, PrismaService, AttendanceService],
-  controllers: [PayrollController]
+  controllers: [PayrollController],
+  exports: [PayrollService],
 })
 export class PayrollModule {}

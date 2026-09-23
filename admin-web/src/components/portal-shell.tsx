@@ -122,7 +122,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const isAdmin = isUserAdmin(user);
 
-  if (pathname === '/login' || pathname === '/change-password') return <>{children}</>;
+  if (pathname === '/login' || pathname === '/change-password' || pathname.startsWith('/me')) {
+    return <>{children}</>;
+  }
 
   // Block regular employees from accessing system admin area
   if (!isAdmin && pathname.startsWith('/hrm/admin')) {

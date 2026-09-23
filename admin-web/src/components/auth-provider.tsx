@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { usePathname, useRouter } from 'next/navigation';
 import { Alert, Button, Spin } from 'antd';
 import { authError, getCurrentUser, restoreSession, type CurrentUser } from '@/lib/api-client';
+import { isUserAdmin } from '@/lib/auth-roles';
 
 const AuthContext = createContext<{ user: CurrentUser | null; loading: boolean }>({ user: null, loading: true });
 export const useAuth = () => useContext(AuthContext);
@@ -32,9 +33,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
   useEffect(() => {
     if (loading || error) return;
-    if (!user && pathname !== '/login') router.replace('/login');
-    else if (user?.mustChangePassword && pathname !== '/change-password') router.replace('/change-password');
-    else if (user && !user.mustChangePassword && pathname === '/login') router.replace('/');
+    if (!user && pathname !== '/login') {
+      router.replace('/login');
+    } else if (user?.mustChangePassword && pathname !== '/change-password') {
+      router.replace('/change-password');
+    } else if (user && !user.mustChangePassword) {
+      const isAdmin = isUserAdmin(user);
+      if (pathname === '/login') {
+        router.replace(isAdmin ? '/' : '/me');
+      } else if (!isAdmin && (pathname === '/' || pathname.startsWith('/hrm'))) {
+        router.replace('/me');
+      }
+    }
   }, [user, loading, error, pathname, router]);
   if (loading) return <div className="auth-loading"><Spin size="large" /><p>Đang kiểm tra phiên đăng nhập…</p></div>;
   if (error) return <div className="auth-loading"><Alert type="error" title={error} /><Button onClick={() => { setLoading(true); setError(''); void initialize(); }}>Thử lại</Button></div>;

@@ -1,14 +1,53 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { gpsInput, shiftInput } from './settings-validation';
 
 @Injectable()
 export class AttendanceService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getGpsSettings() {
+    return this.prisma.client.gpsLocation.findMany({
+      orderBy: { code: 'asc' },
+      include: { assignedEmployees: { include: { employee: { select: { id: true, code: true, name: true } } } } },
+    });
+  }
+
+  async saveGpsSettings(rows: Record<string, unknown>[], id?: string) {
+    if (!Array.isArray(rows) || !rows.length || rows.length > 100)
+      throw new BadRequestException('Nhập từ 1 đến 100 địa điểm');
+    const data = rows.map(gpsInput);
+    try {
+      if (id) return await this.prisma.client.gpsLocation.update({ where: { id }, data: data[0] });
+      return await this.prisma.client.$transaction(data.map(item => this.prisma.client.gpsLocation.create({ data: item })));
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') throw new BadRequestException('Mã địa điểm đã tồn tại; chưa lưu thay đổi');
+      if ((error as { code?: string }).code === 'P2025') throw new NotFoundException('Không tìm thấy địa điểm');
+      throw error;
+    }
+  }
+
+  async saveShiftSettings(input: Record<string, unknown>, id?: string) {
+    const data = shiftInput(input);
+    const gpsIds = Array.isArray(input.gpsLocationIds) ? input.gpsLocationIds.filter((v): v is string => typeof v === 'string') : [];
+    try {
+      const saved = id
+        ? await this.prisma.client.shift.update({ where: { id }, data })
+        : await this.prisma.client.shift.create({ data });
+      await this.prisma.client.shiftGpsLocation.deleteMany({ where: { shiftId: saved.id } });
+      if (gpsIds.length) await this.prisma.client.shiftGpsLocation.createMany({ data: gpsIds.map(gpsLocationId => ({ shiftId: saved.id, gpsLocationId })), skipDuplicates: true });
+      return this.prisma.client.shift.findUnique({ where: { id: saved.id }, include: { gpsLocations: { include: { gpsLocation: true } } } });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') throw new BadRequestException('Mã ca đã tồn tại');
+      if ((error as { code?: string }).code === 'P2025') throw new NotFoundException('Không tìm thấy ca');
+      throw error;
+    }
+  }
+
   // ── Shift CRUD (Bước A: Tạo Ca mẫu) ────────────────────────────────────────
 
   async getShifts() {
-    return this.prisma.client.shift.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.client.shift.findMany({ orderBy: { name: 'asc' }, include: { gpsLocations: { include: { gpsLocation: true } } } });
   }
 
   async createShift(data: {
@@ -801,112 +840,225 @@ export class AttendanceService {
     return { success: true, imported, total: records.length };
   }
 
-  // ── Mobile App GPS / Wifi / FaceID Check-in & Check-out ───────────────────
+  // ── Haversine Distance Calculator ──────────────────────────────────────────
+  calculateHaversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371e3; // Earth radius in meters
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+  }
+
+  // ── Mobile App GPS Check-in & Check-out ───────────────────────────────────
+  async getAssignedGpsLocations(employeeId: string) {
+    const emp = await this.prisma.client.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        gpsLocations: {
+          include: { gpsLocation: true },
+        },
+      },
+    });
+    if (!emp) return [];
+
+    let activeLocs = (emp.gpsLocations || [])
+      .map((l) => l.gpsLocation)
+      .filter((loc) => loc && loc.isActive);
+
+    // Fallback: If employee has no specific assignments, return all active company locations
+    if (activeLocs.length === 0) {
+      activeLocs = await this.prisma.client.gpsLocation.findMany({
+        where: { isActive: true },
+      });
+    }
+
+    return activeLocs.map((loc) => ({
+      id: loc.id,
+      code: loc.code,
+      name: loc.name,
+      address: loc.address,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      radius: loc.radius,
+    }));
+  }
+
   async mobileCheckIn(data: {
     employeeId: string;
-    type: 'CHECK_IN' | 'CHECK_OUT';
-    date?: string;
-    location?: string;
-    verifyMode?: string;
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    type?: 'CHECK_IN' | 'CHECK_OUT' | 'AUTO';
   }) {
-    const emp = await this.prisma.client.employee.findUnique({ where: { id: data.employeeId } });
-    if (!emp) throw new Error('Không tìm thấy nhân sự');
+    const emp = await this.prisma.client.employee.findUnique({
+      where: { id: data.employeeId },
+      include: {
+        gpsLocations: {
+          include: { gpsLocation: true },
+        },
+      },
+    });
+    if (!emp) throw new NotFoundException('Không tìm thấy hồ sơ nhân sự.');
 
-    const todayStr =
-      data.date ||
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
-    const checkDate = new Date(`${todayStr}T00:00:00.000Z`);
+    if (
+      typeof data.latitude !== 'number' ||
+      typeof data.longitude !== 'number' ||
+      isNaN(data.latitude) ||
+      isNaN(data.longitude)
+    ) {
+      throw new BadRequestException('Vui lòng bật định vị GPS và cấp quyền vị trí trên thiết bị để chấm công.');
+    }
+
+    // 1. Validate assigned GPS locations (with active company fallback)
+    let activeLocations = (emp.gpsLocations || [])
+      .map((l) => l.gpsLocation)
+      .filter((loc) => loc && loc.isActive);
+
+    if (activeLocations.length === 0) {
+      activeLocations = await this.prisma.client.gpsLocation.findMany({
+        where: { isActive: true },
+      });
+    }
+
+    if (activeLocations.length === 0) {
+      throw new BadRequestException('Hệ thống chưa có địa điểm chấm công GPS nào được kích hoạt. Vui lòng liên hệ quản lý / HR.');
+    }
+
+    // Compute distance to each assigned location
+    const locationEvaluations = activeLocations.map((loc) => {
+      const dist = this.calculateHaversineDistance(
+        data.latitude!,
+        data.longitude!,
+        loc.latitude,
+        loc.longitude,
+      );
+      return {
+        location: loc,
+        distance: dist,
+        isInside: dist <= loc.radius,
+      };
+    });
+
+    const validMatch = locationEvaluations.find((e) => e.isInside);
+    if (!validMatch) {
+      const closest = locationEvaluations.sort((a, b) => a.distance - b.distance)[0];
+      throw new BadRequestException(
+        `Vị trí chấm công không hợp lệ (Ngoài bán kính)! Địa điểm gần nhất "${closest.location.name}" cách bạn ${closest.distance}m (Bán kính cho phép tối đa: ${closest.location.radius}m).`,
+      );
+    }
+
+    const matchedLocationName = `${validMatch.location.name} (${validMatch.location.address || ''})`;
+
+    // 2. Timesheet Lock Check (using server date in Vietnam timezone)
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+    const monthStr = todayStr.slice(0, 7);
+    const lock = await this.prisma.client.timesheetLock.findUnique({
+      where: { month: monthStr },
+    });
+    if (lock) {
+      throw new BadRequestException(`Kỳ công tháng ${monthStr} đã được chốt và khóa. Không thể thực hiện chấm công.`);
+    }
+
+    // 3. Anti-Duplicate / Anti-Debounce (60 seconds)
     const now = new Date();
+    const sixtySecondsAgo = new Date(now.getTime() - 60 * 1000);
+    const recentPunch = await this.prisma.client.biometricRawLog.findFirst({
+      where: {
+        employeeId: emp.id,
+        timestamp: { gte: sixtySecondsAgo },
+      },
+      orderBy: { timestamp: 'desc' },
+    });
+    if (recentPunch) {
+      throw new BadRequestException('Bạn vừa thực hiện chấm công cách đây ít giây. Vui lòng chờ tối thiểu 1 phút trước khi chấm lần tiếp theo.');
+    }
 
-    // 1. Create BiometricRawLog history
+    // 4. Save Raw Punch to BiometricRawLog
     await this.prisma.client.biometricRawLog.create({
       data: {
         employeeId: emp.id,
         timestamp: now,
-        location: data.location || emp.gpsLocation || '14 Lê Duy Đình (GPS Chuẩn)',
-        verifyMode: data.verifyMode || 'Khuôn mặt (FaceID) + GPS',
-        fromType: 'MOBILE_APP',
+        location: matchedLocationName,
+        verifyMode: 'GPS Chuẩn Xác',
+        fromType: 'GPS_MOBILE',
       },
     });
 
-    // 2. Upsert AttendanceLog
+    // 5. Upsert AttendanceLog (Preserving initial check-in time)
+    const checkDate = new Date(`${todayStr}T00:00:00.000Z`);
     const existingLog = await this.prisma.client.attendanceLog.findFirst({
       where: { employeeId: emp.id, date: checkDate },
     });
 
-    if (data.type === 'CHECK_IN') {
-      if (existingLog) {
-        await this.prisma.client.attendanceLog.update({
-          where: { id: existingLog.id },
-          data: {
-            checkIn: now,
-            checkInLocation: data.location || emp.gpsLocation || '14 Lê Duy Đình (GPS Chuẩn)',
-            status: 'PRESENT',
-          },
-        });
-      } else {
-        await this.prisma.client.attendanceLog.create({
-          data: {
-            employeeId: emp.id,
-            date: checkDate,
-            checkIn: now,
-            checkInLocation: data.location || emp.gpsLocation || '14 Lê Duy Đình (GPS Chuẩn)',
-            status: 'PRESENT',
-          },
-        });
-      }
+    let actionType: 'CHECK_IN' | 'CHECK_OUT' = 'CHECK_IN';
+
+    if (!existingLog) {
+      // First punch of the day: Check-in
+      actionType = 'CHECK_IN';
+      await this.prisma.client.attendanceLog.create({
+        data: {
+          employeeId: emp.id,
+          date: checkDate,
+          checkIn: now,
+          checkInLocation: matchedLocationName,
+          status: 'PRESENT',
+        },
+      });
+    } else if (!existingLog.checkIn) {
+      actionType = 'CHECK_IN';
+      await this.prisma.client.attendanceLog.update({
+        where: { id: existingLog.id },
+        data: {
+          checkIn: now,
+          checkInLocation: matchedLocationName,
+          status: 'PRESENT',
+        },
+      });
     } else {
-      if (existingLog) {
-        await this.prisma.client.attendanceLog.update({
-          where: { id: existingLog.id },
-          data: {
-            checkOut: now,
-            checkOutLocation: data.location || emp.gpsLocation || '14 Lê Duy Đình (GPS Chuẩn)',
-          },
-        });
-      } else {
-        await this.prisma.client.attendanceLog.create({
-          data: {
-            employeeId: emp.id,
-            date: checkDate,
-            checkOut: now,
-            checkOutLocation: data.location || emp.gpsLocation || '14 Lê Duy Đình (GPS Chuẩn)',
-            status: 'PRESENT',
-          },
-        });
-      }
+      // Subsequent punch of the day: Check-out (never overwriting checkIn)
+      actionType = 'CHECK_OUT';
+      await this.prisma.client.attendanceLog.update({
+        where: { id: existingLog.id },
+        data: {
+          checkOut: now,
+          checkOutLocation: matchedLocationName,
+          status: 'PRESENT',
+        },
+      });
     }
 
-    const finalLog = await this.prisma.client.attendanceLog.findFirst({
-      where: { employeeId: emp.id, date: checkDate },
-    });
-
-    let workday = 0;
-    if (finalLog?.checkIn && finalLog?.checkOut) {
-      workday = 1.0;
-    } else if (finalLog?.checkIn || finalLog?.checkOut) {
-      workday = 0.5;
-    }
+    const todayData = await this.getMyToday(emp.id, todayStr);
 
     return {
       success: true,
-      message: `Dập thẻ ${data.type === 'CHECK_IN' ? 'VÀO (Check-in)' : 'RA (Check-out)'} thành công cho nhân viên ${emp.name}!`,
-      workday,
-      log: finalLog
-        ? {
-            id: finalLog.id,
-            checkIn: finalLog.checkIn ? finalLog.checkIn.toISOString() : null,
-            checkOut: finalLog.checkOut ? finalLog.checkOut.toISOString() : null,
-            checkInLocation: finalLog.checkInLocation,
-            checkOutLocation: finalLog.checkOutLocation,
-            status: finalLog.status,
-          }
-        : null,
+      actionType,
+      message: `Chấm công ${actionType === 'CHECK_IN' ? 'VÀO (Check-in)' : 'RA (Check-out)'} thành công lúc ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} tại ${validMatch.location.name}!`,
+      distance: validMatch.distance,
+      locationName: matchedLocationName,
+      todayData,
     };
   }
 
   // ── 1Office Excel Import Parser Format 2: Monthly Timesheet Matrix ──────────
-  async importTimesheetMatrix(month: string, records: Array<{ personnelCode: string; fullname?: string; totalWorkday?: number; totalOT?: number; totalLateMinute?: number }>) {
+  async importTimesheetMatrix(
+    month: string,
+    records: Array<{
+      personnelCode: string;
+      fullname?: string;
+      totalWorkday?: number;
+      totalOT?: number;
+      totalLateMinute?: number;
+    }>,
+  ) {
     let imported = 0;
     for (const rec of records) {
       const emp = await this.prisma.client.employee.findFirst({
@@ -919,60 +1071,181 @@ export class AttendanceService {
     return { success: true, imported, total: records.length };
   }
 
+  // ── Unified Attendance Calculation Engine ────────────────────────────────
+  calculateAttendanceMetrics(
+    shift: any | null,
+    log: any | null,
+  ): {
+    workday: number;
+    effectiveHours: number;
+    effectiveMinutes: number;
+    lateMinutes: number;
+    earlyMinutes: number;
+    status: string;
+  } {
+    if (!log || (!log.checkIn && !log.checkOut)) {
+      return {
+        workday: 0,
+        effectiveHours: 0,
+        effectiveMinutes: 0,
+        lateMinutes: 0,
+        earlyMinutes: 0,
+        status: shift ? 'ABSENT' : 'NO_SHIFT',
+      };
+    }
+
+    const checkIn = log.checkIn ? new Date(log.checkIn) : null;
+    const checkOut = log.checkOut ? new Date(log.checkOut) : null;
+
+    let lateMinutes = 0;
+    let earlyMinutes = 0;
+    let effectiveHours = 0;
+    let effectiveMinutes = 0;
+    let workday = 0;
+    let status = 'PRESENT';
+
+    // 1. Calculate late minutes
+    if (checkIn && shift?.startTime) {
+      const [sh, sm] = shift.startTime.split(':').map(Number);
+      const inH = checkIn.getHours();
+      const inM = checkIn.getMinutes();
+      const diffMin = inH * 60 + inM - (sh * 60 + sm);
+      const grace = shift.graceLateMinutes ?? 15;
+      if (diffMin > grace) {
+        lateMinutes = diffMin;
+      }
+    }
+
+    // 2. Calculate early minutes
+    if (checkOut && shift?.endTime) {
+      const [eh, em] = shift.endTime.split(':').map(Number);
+      const outH = checkOut.getHours();
+      const outM = checkOut.getMinutes();
+      const diffMin = eh * 60 + em - (outH * 60 + outM);
+      const grace = (shift as any).graceEarlyMinutes ?? 15;
+      if (diffMin > grace) {
+        earlyMinutes = diffMin;
+      }
+    }
+
+    // 3. Calculate actual work duration & workday
+    if (checkIn && checkOut) {
+      const diffMs = checkOut.getTime() - checkIn.getTime();
+      let diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
+
+      // Deduct lunch break if shift specifies break window
+      if (shift?.breakStart && shift?.breakEnd) {
+        const [bsh, bsm] = shift.breakStart.split(':').map(Number);
+        const [beh, bem] = shift.breakEnd.split(':').map(Number);
+        const breakDurationHrs = Math.max(0, (beh * 60 + bem - (bsh * 60 + bsm)) / 60);
+        if (diffHrs >= 5 && breakDurationHrs > 0) {
+          diffHrs = Math.max(0, diffHrs - breakDurationHrs);
+        }
+      }
+
+      effectiveHours = Math.round(diffHrs * 10) / 10;
+      effectiveMinutes = Math.round(effectiveHours * 60);
+
+      const standardHours = shift?.standardHours || 8.0;
+      const coefficient = shift?.coefficient || 1.0;
+
+      // Full work credit if within 15 minutes of standard hours
+      if (effectiveHours >= standardHours - 0.25) {
+        workday = coefficient * 1.0;
+      } else if (effectiveHours >= standardHours / 2 - 0.25) {
+        workday = coefficient * 0.5;
+      } else if (effectiveHours > 0) {
+        workday = Math.round((effectiveHours / standardHours) * 10) / 10;
+      } else {
+        workday = 0;
+      }
+      status = 'PRESENT';
+    } else if (checkIn) {
+      workday = 0;
+      status = 'MISSING_CHECKOUT';
+    } else if (checkOut) {
+      workday = 0;
+      status = 'MISSING_CHECKIN';
+    }
+
+    return {
+      workday,
+      effectiveHours,
+      effectiveMinutes,
+      lateMinutes,
+      earlyMinutes,
+      status,
+    };
+  }
+
   // ── Today's Attendance & Shifts for Employee ─────────────────────────────
-  async getMyToday(employeeId?: string) {
-    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+  async getMyToday(employeeId?: string, targetDateStr?: string) {
+    const todayStr =
+      targetDateStr ||
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
     const startOfDay = new Date(`${todayStr}T00:00:00.000Z`);
     const endOfDay = new Date(`${todayStr}T23:59:59.999Z`);
 
     if (!employeeId) {
       return {
         date: todayStr,
+        shift: null,
         shifts: [],
         log: null,
+        rawLogs: [],
+        assignedLocations: [],
         workday: 0,
+        workDay: 0,
+        effectiveHours: 0,
+        effectiveMinutes: 0,
+        lateMinutes: 0,
+        earlyMinutes: 0,
         monthSummary: { totalWorkdays: 0, lateMinutes: 0, earlyMinutes: 0 },
       };
     }
 
     // 1. Get today's assignments (only approved shifts show for employee)
-    const assignments = await this.prisma.client.shiftAssignment.findMany({
-      where: {
-        employeeId,
-        date: { gte: startOfDay, lte: endOfDay },
-        status: 'APPROVED',
-      },
-      include: {
-        shift: true,
-        employee: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            gpsLocation: true,
-            department: { select: { name: true } },
+    const [assignments, log, rawLogs, assignedLocations] = await Promise.all([
+      this.prisma.client.shiftAssignment.findMany({
+        where: {
+          employeeId,
+          date: { gte: startOfDay, lte: endOfDay },
+          status: 'APPROVED',
+        },
+        include: {
+          shift: true,
+          employee: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              gpsLocation: true,
+              department: { select: { name: true } },
+            },
           },
         },
-      },
-      orderBy: { shift: { startTime: 'asc' } },
-    });
+        orderBy: { shift: { startTime: 'asc' } },
+      }),
+      this.prisma.client.attendanceLog.findFirst({
+        where: {
+          employeeId,
+          date: startOfDay,
+        },
+      }),
+      this.prisma.client.biometricRawLog.findMany({
+        where: {
+          employeeId,
+          timestamp: { gte: startOfDay, lte: endOfDay },
+        },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.getAssignedGpsLocations(employeeId),
+    ]);
 
-    // 2. Get today's attendance log
-    const log = await this.prisma.client.attendanceLog.findFirst({
-      where: {
-        employeeId,
-        date: startOfDay,
-      },
-    });
+    const primaryShift = assignments[0]?.shift || null;
+    const metrics = this.calculateAttendanceMetrics(primaryShift, log);
 
-    let workday = 0;
-    if (log?.checkIn && log?.checkOut) {
-      workday = 1.0;
-    } else if (log?.checkIn || log?.checkOut) {
-      workday = 0.5;
-    }
-
-    // 3. Month summary
+    // 4. Month summary
     const currentMonth = todayStr.slice(0, 7);
     const { startDate, endDate } = this.monthRange(currentMonth);
     const monthLogs = await this.prisma.client.attendanceLog.findMany({
@@ -984,29 +1257,30 @@ export class AttendanceService {
 
     let totalWorkdays = 0;
     for (const l of monthLogs) {
-      if (l.checkIn && l.checkOut) totalWorkdays += 1.0;
-      else if (l.checkIn || l.checkOut) totalWorkdays += 0.5;
+      const m = this.calculateAttendanceMetrics(primaryShift, l);
+      totalWorkdays += m.workday;
     }
 
-    // Calculate late minutes if shift exists
-    let todayLateMinutes = 0;
-    if (log?.checkIn && assignments.length > 0) {
-      const shift = assignments[0].shift;
-      if (shift?.startTime) {
-        const [shiftH, shiftM] = shift.startTime.split(':').map(Number);
-        const checkInDate = new Date(log.checkIn);
-        const checkInH = checkInDate.getHours();
-        const checkInM = checkInDate.getMinutes();
-        const diffMinutes = (checkInH * 60 + checkInM) - (shiftH * 60 + shiftM);
-        const grace = shift.graceLateMinutes || 15;
-        if (diffMinutes > grace) {
-          todayLateMinutes = diffMinutes;
+    const shiftObj = primaryShift
+      ? {
+          id: primaryShift.id,
+          code: primaryShift.code,
+          name: primaryShift.name,
+          startTime: primaryShift.startTime,
+          endTime: primaryShift.endTime,
+          color: primaryShift.color,
+          location:
+            assignedLocations[0]?.address ||
+            assignedLocations[0]?.name ||
+            assignments[0].employee?.gpsLocation ||
+            assignments[0].employee?.department?.name ||
+            'Địa điểm chưa cấu hình',
         }
-      }
-    }
+      : null;
 
     return {
       date: todayStr,
+      shift: shiftObj,
       shifts: assignments.map((a) => ({
         id: a.id,
         shiftId: a.shift.id,
@@ -1015,7 +1289,12 @@ export class AttendanceService {
         startTime: a.shift.startTime,
         endTime: a.shift.endTime,
         color: a.shift.color,
-        location: a.employee?.gpsLocation || a.employee?.department?.name || '14 Lê Duy Đình',
+        location:
+          assignedLocations[0]?.address ||
+          assignedLocations[0]?.name ||
+          a.employee?.gpsLocation ||
+          a.employee?.department?.name ||
+          'Địa điểm chưa cấu hình',
       })),
       log: log
         ? {
@@ -1024,14 +1303,32 @@ export class AttendanceService {
             checkOut: log.checkOut ? log.checkOut.toISOString() : null,
             checkInLocation: log.checkInLocation,
             checkOutLocation: log.checkOutLocation,
-            status: log.status,
+            status: metrics.status,
           }
         : null,
-      workday,
+      rawLogs: rawLogs.map((r) => ({
+        id: r.id,
+        timestamp: r.timestamp.toISOString(),
+        timeStr: new Date(r.timestamp).toLocaleTimeString('vi-VN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        location: r.location || 'GPS Di động',
+        fromType: r.fromType,
+        verifyMode: r.verifyMode || 'GPS Chuẩn Xác',
+      })),
+      assignedLocations,
+      workday: metrics.workday,
+      workDay: metrics.workday,
+      effectiveHours: metrics.effectiveHours,
+      effectiveMinutes: metrics.effectiveMinutes,
+      lateMinutes: metrics.lateMinutes,
+      earlyMinutes: metrics.earlyMinutes,
       monthSummary: {
-        totalWorkdays,
-        lateMinutes: todayLateMinutes,
-        earlyMinutes: 0,
+        totalWorkdays: Math.round(totalWorkdays * 10) / 10,
+        lateMinutes: metrics.lateMinutes,
+        earlyMinutes: metrics.earlyMinutes,
       },
     };
   }
@@ -1156,40 +1453,25 @@ export class AttendanceService {
       standardWorkdays += dayStandardWorkdays;
       standardHours += dayStandardHours;
 
-      let workDay = 0;
+      const primaryDayShift = dayAssignments[0]?.shift || null;
+      const dayMetrics = this.calculateAttendanceMetrics(primaryDayShift, log);
+
+      let workDay = dayMetrics.workday;
       let checkInStr = '--';
       let checkOutStr = '--';
       let checkInFull = log?.checkIn ? new Date(log.checkIn).toISOString() : null;
       let checkOutFull = log?.checkOut ? new Date(log.checkOut).toISOString() : null;
       let checkInLocation = log?.checkInLocation || null;
       let checkOutLocation = log?.checkOutLocation || null;
-      let lateMinutes = 0;
-      let earlyMinutes = 0;
+      let lateMinutes = dayMetrics.lateMinutes;
+      let earlyMinutes = dayMetrics.earlyMinutes;
 
       if (log?.checkIn) {
         checkInStr = new Date(log.checkIn).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-        if (dayShifts.length > 0 && dayShifts[0].startTime) {
-          const [sh, sm] = dayShifts[0].startTime.split(':').map(Number);
-          const inDate = new Date(log.checkIn);
-          const inH = inDate.getUTCHours() + 7;
-          const inM = inDate.getUTCMinutes();
-          const inTotal = (inH >= 24 ? inH - 24 : inH) * 60 + inM;
-          const shiftTotal = sh * 60 + sm;
-          if (inTotal > shiftTotal + 15) {
-            lateMinutes = inTotal - shiftTotal;
-          }
-        }
       }
 
       if (log?.checkOut) {
         checkOutStr = new Date(log.checkOut).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-      }
-
-      // Calculate actual workDay credit
-      if (log?.checkIn && log?.checkOut) {
-        workDay = 1.0;
-      } else if (log?.checkIn || log?.checkOut) {
-        workDay = 0.5;
       }
 
       // If approved leave application exists on this day
@@ -1276,6 +1558,7 @@ export class AttendanceService {
       summary: {
         totalWorkday: Math.round(totalWorkday * 10) / 10,
         totalHours: Math.round(totalHours * 10) / 10,
+        totalEffectiveHours: Math.round(totalHours * 10) / 10,
         standardWorkdays,
         standardHours: Math.round(standardHours * 10) / 10,
         unexcusedLeaveCount,

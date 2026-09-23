@@ -40,13 +40,13 @@ async function main() {
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
       const dow = date.getDay();
-      
+
       // Skip weekends randomly or assign OT? Just skip weekends
       if (dow === 0 || dow === 6) continue;
 
       // Assign shift
       const shiftId = Math.random() > 0.5 ? shiftMorning.id : shiftAfternoon.id;
-      
+
       await prisma.shiftAssignment.upsert({
         where: { employeeId_date: { employeeId: emp.id, date } },
         create: { employeeId: emp.id, shiftId, date },

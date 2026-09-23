@@ -1,16 +1,22 @@
 # 00 — Trạng thái dự án
 
-Cập nhật: 2026-09-22. Đây là bản bàn giao chung cho người phát triển, Codex và Antigravity.
+Cập nhật: 2026-09-23. Đây là bản bàn giao chung cho người phát triển, Codex và Antigravity.
 
-Hotfix 2026-09-22: sửa biến origin chưa khai báo trong AuthController.client gây HTTP 500 khi refresh phiên trên Coolify. Backend build và kiểm tra controller đạt (origin hợp lệ, thiếu Origin, origin bị chặn, client sai). Chưa push/redeploy; chưa xác minh dữ liệu MySQL production.
-Đọc file này, [nhật ký bàn giao](08-handoff-log.md), README và đặc tả liên quan trước khi sửa code. Đối chiếu mã nguồn vì tài liệu có thể chưa cập nhật.
+**Cập nhật mới nhất (2026-09-23):**
+- Codex bổ sung `/hrm/attendance/settings`: hai mục Ca làm việc / Địa điểm GPS, tạo/sửa ca, tạo nhiều địa điểm trong transaction, sửa/trạng thái GPS, xem bản đồ, tìm kiếm và xuất CSV. Nối nút Cài đặt trong bảng công. Dùng schema GPS hiện có của Anti, không thay migration. Import, đối tượng áp dụng, Wifi, ghi chú GPS riêng và quy tắc ca nâng cao chưa triển khai trong màn hình này. Chi tiết kiểm tra ở cuối nhật ký bàn giao.
+- Cập nhật theo xác minh 1Office: Shift lưu `qua ngày`, `check in trước`, `check out sau`; form cho chọn nhiều địa điểm GPS của ca; thêm migration `202609230002_attendance_settings`. Không tự áp dụng quy tắc ưu tiên GPS vào thuật toán chấm cho đến khi có kiểm thử nghiệp vụ.
+- Triển khai Cổng nhân viên di động (Mobile Employee Portal) ngay trong `admin-web` tại `/me`, `/me/attendance`, `/me/payroll` và `admin-web/src/features/personal`.
+- Hoàn thiện luồng Chấm công GPS Di động: Mô hình `GpsLocation` và `EmployeeGpsLocation` trong Prisma MySQL, tính khoảng cách Haversine thực tế, chặn ngoài bán kính (`OUT_OF_RADIUS`), kiểm tra khóa bảng công (`TimesheetLock`), chống chấm trùng (debounce 60s), ghi nhận đầy đủ vào `BiometricRawLog`.
+- Chuẩn hóa công thức tính công `calculateAttendanceMetrics`: So sánh thời lượng làm việc thực tế (đã trừ giờ nghỉ) với giờ chuẩn của ca làm việc, xử lý múi giờ Việt Nam (`Asia/Ho_Chi_Minh`), xóa bỏ hoàn toàn hardcode mock data.
+- Bảo mật phân quyền: Bảo vệ toàn bộ endpoint quản trị `/attendance/*` bằng quyền `admin.access`; chuyển toàn bộ luồng nhân viên sang `/me/attendance/*` (lấy danh tính từ JWT token); bảo vệ quyền duyệt đơn từ theo cấp duyệt/quản lý (`ApplicationApproval.step` / `managerId`).
+- Giao diện mobile chuẩn 1Office: Top Header, Bottom Navigation Bar, Menu Drawer danh mục trượt từ dưới lên, Action Sheet cá nhân, `PersonalGpsPunchModal` định vị GPS theo thời gian thực và Bảng công 4 tab (Công tháng, Công tuần, Thống kê, Danh sách).
 
 ## Phạm vi và quyết định đã chốt
 
-- HRM doanh nghiệp/nhà máy, gồm admin-web, client-web, backend, docs.
-- Hai web: Next.js/React/TypeScript/App Router/Tailwind/Ant Design/Axios.
-- Backend: NestJS modular monolith, REST, Prisma 7, MySQL 8.4. Backend sở hữu nghiệp vụ.
-- Đã bỏ Flutter và thư mục mobile. Định hướng web/PWA; chưa triển khai manifest/service worker, offline hay push.
+- HRM doanh nghiệp/nhà máy, gồm `admin-web` (tích hợp quản trị và mobile cá nhân `/me`), `backend`, `docs`.
+- Frontend: Next.js 16/React 19/TypeScript/App Router/Ant Design.
+- Backend: NestJS modular monolith, REST, Prisma 7, MySQL.
+- Định hướng Mobile PWA trong `admin-web`; không dùng `client-web`.
 - 8 chức năng: Đơn từ, Nhân sự, Đánh giá, Chấm công, Bảng lương, Ứng lương, KPI, OKR.
 - Tham khảo mô tả/ảnh 1Office do người dùng cung cấp; không coi câu trả lời AI bên đó là đặc tả đã kiểm chứng, không sao chép mã/tài sản của họ.
 - Đã chốt schema xác thực và Employee MVP theo 4 điểm người dùng duyệt; chưa chốt toàn bộ HRM.

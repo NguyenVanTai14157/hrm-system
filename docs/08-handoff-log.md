@@ -247,3 +247,126 @@ Người dùng yêu cầu bên phải màn hình nhân sự phải gần với h
 - AuthController.client đọc header Origin vào biến origin, sửa ReferenceError gây HTTP 500 khi refresh phiên.
 - Backend production build đạt; assertion trên controller đã biên dịch đạt cho origin hợp lệ, thiếu Origin, origin bị chặn và client sai.
 - Không thay đổi database. Bản sửa ở workspace, chưa commit/push/redeploy; chưa xác minh schema/dữ liệu MySQL production.
+
+## 2026-09-23 — Codex: chẩn đoán MySQL local Access denied
+
+- Người dùng yêu cầu sửa local trong lúc chờ đặc tả mobile; xác nhận ảnh mobile là tài khoản nhân viên thường.
+- MySQL84 Running, wampmysqld Stopped. DATABASE_URL trong backend/.env trỏ root@localhost:3306/hrm_db, có mật khẩu; tiến trình kiểm tra không có DATABASE_URL ghi đè từ môi trường.
+- Kết nối trực tiếp bằng mariadb với cấu hình file tái hiện ER_ACCESS_DENIED_ERROR, errno 1045, SQLState 28000. Lỗi pool 45028 là triệu chứng; không tăng pool hoặc timeout để che lỗi xác thực.
+- Đã yêu cầu người dùng cập nhật mật khẩu MySQL local hợp lệ trong file môi trường, không gửi bí mật qua chat. Chưa có thông tin thay thế để sửa kết nối; không reset MySQL/tài khoản HRM, không đổi code hoặc database.
+- Không đọc/in .env.bootstrap hay mật khẩu. Ghi nhận thay đổi có sẵn ở backend/package.json và backend/prisma/seed-attendance-payroll.ts, không sửa các file này.
+- Tiếp theo: sau khi cấu hình được cập nhật, kiểm tra SELECT 1 và kết nối Prisma, rồi kiểm tra backend local. Chưa đánh dấu đã sửa xong.
+
+### Cập nhật cùng ngày — kết nối đã đạt và tiếp nhận mô tả mobile
+
+- Thử lại cấu hình local: MariaDB driver và Prisma client từ backend/dist đều SELECT 1 thành công. Không còn tái hiện lỗi xác thực trong tiến trình kiểm tra mới; chưa kiểm tra lại phiên đăng nhập trên web. Backend đang chạy cần khởi động lại nếu còn giữ môi trường cũ.
+- Người dùng gửi mô tả AI 1Office cho 5 ảnh mobile. Nội dung trả lời nhầm sang desktop: menu bên trái, widget bên phải, tab công khác ảnh; nhầm Danh mục với avatar và nói chưa có ảnh lương dù người dùng đã gửi. Chỉ dùng ảnh làm căn cứ bố cục; phần ngoài ảnh và hành vi chưa kiểm chứng để chờ xác nhận, không giao triển khai dựa trên mô tả desktop này.
+- Giữ thỏa thuận: Codex lập kế hoạch/review, Antigravity triển khai; ngoại lệ sửa lỗi local đã được người dùng yêu cầu rõ. Chưa sửa UI mobile trong lượt này.
+
+## 2026-09-23 — Antigravity: Triển khai Cổng Mobile Nhân Viên (/me)
+
+### Phạm vi đã hoàn thành
+- Triển khai toàn bộ khu vực nhân viên mobile bên trong `admin-web` (tại `/me`, `/me/attendance`, `/me/payroll`).
+- Xóa bỏ các tham chiếu đến `client-web` trong `README.md` và `docs/00-project-status.md`, hợp nhất hệ thống vào `admin-web`.
+- Xây dựng Backend `MeModule` (`GET /me/profile`, `GET /me/attendance`, `GET /me/payroll`) cho phép nhân viên truy cập dữ liệu cá nhân theo phiên đăng nhập mà không cần quyền `admin.access`.
+- Xây dựng giao diện mobile chuẩn 1Office:
+  - Header: Menu, Title, Bookmark, Bell, Home.
+  - Bottom Navigation Bar: Danh mục, Tác vụ +, Cá nhân.
+  - Bảng chọn danh mục (Menu Drawer): Bảng công, Bảng lương, Hồ sơ nhân sự.
+  - Màn hình Hồ sơ `/me`: Header avatar, Thông tin liên hệ/công việc, 2 tab Thông tin chung & Sơ yếu lý lịch, trạng thái loading/error/chưa liên kết.
+  - Màn hình Bảng công `/me/attendance`: Lịch công tháng (T2 - CN), giờ vào/ra, số công, popup chi tiết ngày và chấm công GPS nhanh.
+  - Màn hình Bảng lương `/me/payroll`: Thẻ tổng lương thực nhận, danh sách 12 tháng và popup chi tiết phiếu lương.
+- Điều hướng bảo mật: Nhân viên thường đăng nhập sẽ tự động vào `/me`, khu vực quản trị `/hrm/*` được bảo vệ nghiêm ngặt.
+
+### Danh sách file tạo mới & chỉnh sửa
+- `backend/src/modules/me/me.controller.ts` (MỚI)
+- `backend/src/modules/me/me.module.ts` (MỚI)
+- `backend/src/app.module.ts` (Chỉnh sửa)
+- `backend/src/modules/employees/employees.module.ts` (Chỉnh sửa)
+- `backend/src/modules/attendance/attendance.module.ts` (Chỉnh sửa)
+- `backend/src/modules/payroll/payroll.module.ts` (Chỉnh sửa)
+- `admin-web/src/features/personal/personal.css` (MỚI)
+- `admin-web/src/features/personal/personal-shell.tsx` (MỚI)
+- `admin-web/src/features/personal/personal-menu-drawer.tsx` (MỚI)
+- `admin-web/src/features/personal/personal-profile-screen.tsx` (MỚI)
+- `admin-web/src/features/personal/personal-attendance-screen.tsx` (MỚI)
+- `admin-web/src/features/personal/personal-payroll-screen.tsx` (MỚI)
+- `admin-web/src/app/me/layout.tsx` (MỚI)
+- `admin-web/src/app/me/page.tsx` (MỚI)
+- `admin-web/src/app/me/attendance/page.tsx` (MỚI)
+- `admin-web/src/app/me/payroll/page.tsx` (MỚI)
+- `admin-web/src/components/auth-provider.tsx` (Chỉnh sửa)
+- `admin-web/src/lib/auth-roles.ts` (Chỉnh sửa)
+- `README.md` (Chỉnh sửa)
+- `docs/00-project-status.md` (Chỉnh sửa)
+
+### Kết quả kiểm tra
+- `backend` typecheck: `npx tsc --noEmit` đạt (code 0).
+- `admin-web` typecheck: `npx tsc --noEmit` đạt (code 0).
+- `admin-web` production build: `next build` đạt toàn bộ 37 routes tĩnh/động.
+- Tuyệt đối không push Git theo chỉ đạo của người dùng.
+
+## 2026-09-23 — Antigravity: Hoàn thiện luồng Chấm công GPS Mobile & Bảo mật phân quyền
+
+### Phạm vi và mục tiêu đã hoàn thành
+- **Mô hình Dữ liệu GPS**:
+  - Thêm `GpsLocation` và bảng liên kết `EmployeeGpsLocation` vào `schema.prisma`.
+  - Thực hiện migration an toàn không reset database (`backend/scripts/migrate-gps-locations.ts`) tạo 2 địa điểm mẫu `TEST_HQ` và `TEST_CN_DANANG` gắn tự động cho toàn bộ nhân sự.
+- **Bảo mật & Quyền truy cập**:
+  - Tất cả các endpoint quản trị `/attendance/*` được bảo vệ nghiêm ngặt bằng `@RequirePermissions('admin.access')`.
+  - Toàn bộ luồng nhân viên sử dụng bộ API `/me/attendance/*` (lấy `employeeId` từ JWT session của người đăng nhập).
+  - Nhân viên không thể chấm hộ, xem công người khác hoặc sửa đổi phân ca.
+  - Sửa logic duyệt đơn: Kiểm tra chặt chẽ `approverId` khớp với người được gán tại bước duyệt (`ApplicationApproval.step`) hoặc `managerId` của người làm đơn (trừ tài khoản quản trị).
+  - Sửa `GET /me/payroll`: Chỉ hiển thị các kỳ lương có trạng thái `APPROVED` hoặc `PUBLISHED` (ẩn `CALCULATED`).
+- **Nghiệp vụ Chấm công GPS chuẩn xác**:
+  - Tọa độ GPS lấy trực tiếp từ trình duyệt HTML5 Geolocation, đo khoảng cách thực tế theo công thức Haversine với các vị trí được phân công (`getAssignedGpsLocations`).
+  - Kiểm tra bán kính nghiêm ngặt (`OUT_OF_RADIUS`), kiểm tra khóa bảng công (`TimesheetLock`), chống duplicate punch (debounce 60s), lưu đầy đủ vào `BiometricRawLog`.
+  - Xử lý thời gian server theo múi giờ Việt Nam (`Asia/Ho_Chi_Minh`), không nhận giờ máy trạm.
+  - Công thức tính công chuẩn hóa `calculateAttendanceMetrics`: So sánh thời gian làm việc thực tế (trừ giờ nghỉ trưa) với giờ chuẩn của ca (không hardcode 0.5/1.0 hay nhánh demo).
+- **Giao diện & Trải nghiệm**:
+  - Xây dựng component modal chấm công chuyên dụng `PersonalGpsPunchModal` (`admin-web/src/features/personal/personal-gps-punch-modal.tsx`).
+  - Hiển thị khoảng cách và badge trạng thái tới từng địa điểm được gán.
+  - Tích hợp vào `PersonalShell`, `PersonalHomeScreen` và `PersonalAttendanceScreen` hỗ trợ đầy đủ 4 tab (Công tháng, Công tuần, Thống kê, Danh sách).
+
+### Danh sách file tạo mới & chỉnh sửa
+- `backend/prisma/schema.prisma` (Chỉnh sửa: thêm `GpsLocation`, `EmployeeGpsLocation`)
+- `backend/src/modules/attendance/attendance.service.ts` (Chỉnh sửa: Haversine distance, assigned GPS locations, `mobileCheckIn`, unified `calculateAttendanceMetrics`, `getMyToday`, `getMyMonthAttendance`)
+- `backend/src/modules/attendance/attendance.controller.ts` (Chỉnh sửa: Bảo vệ quyền `admin.access`)
+- `backend/src/modules/me/me.controller.ts` (Chỉnh sửa: thêm `GET /me/attendance/gps-locations`, sửa `POST /me/attendance/checkin`, sửa filter `/me/payroll`, duyệt bypass)
+- `backend/src/modules/applications/applications.service.ts` (Chỉnh sửa: Kiểm tra người duyệt đúng bước/quản lý)
+- `backend/test/gps-attendance.test.ts` (MỚI: Unit test kiểm tra Haversine & tính toán chỉ số công)
+- `admin-web/src/features/personal/personal-gps-screen.tsx` (MỚI: Màn hình Chấm công GPS chuẩn 1Office theo 3 ảnh thực tế)
+- `admin-web/src/app/me/attendance/gps/page.tsx` (MỚI: Tuyến đường `/me/attendance/gps`)
+- `admin-web/src/features/personal/personal-gps-punch-modal.tsx` (MỚI)
+- `admin-web/src/features/personal/personal-shell.tsx` (Chỉnh sửa: Điều hướng Chấm công GPS/Wifi sang `/me/attendance/gps`)
+- `admin-web/src/features/personal/personal-menu-drawer.tsx` (Chỉnh sửa: Thêm liên kết `/me/attendance/gps` vào danh mục)
+- `admin-web/src/features/personal/personal-home-screen.tsx` (Chỉnh sửa: Điều hướng sang `/me/attendance/gps`)
+- `admin-web/src/features/personal/personal-attendance-screen.tsx` (Chỉnh sửa: Cập nhật 4 tab hiển thị dữ liệu thật)
+- `docs/00-project-status.md` (Cập nhật)
+- `docs/08-handoff-log.md` (Cập nhật)
+
+### Kết quả kiểm tra
+- `backend` unit tests (`tsx --test test/gps-attendance.test.ts`): 5/5 tests PASS 100%.
+- `backend` typecheck: `npx tsc --noEmit` đạt (code 0).
+- `admin-web` typecheck: `npx tsc --noEmit` đạt (code 0).
+- `hrm-system` typecheck toàn bộ: `npm run typecheck` đạt (code 0).
+- Live API integration verification: Đã kiểm tra GPS in-radius punch, out-of-radius rejection, 60s debounce, và tính toán công tháng trực tiếp trên database thành công.
+- Giao diện 1Office Chấm công GPS/Wifi: Illustration artwork, nút CHẤM CÔNG GPS! màu cam, câu hỏi FAQ mở rộng, thẻ ca & địa điểm, thanh ngang 7 ngày trong tuần với trạng thái quẹt thẻ, modal Thông báo quyền GPS chuẩn 1:1 theo 3 ảnh người dùng cung cấp.
+
+
+## 2026-09-23 — Codex: Cài đặt ca và địa điểm GPS bản đầu
+
+- Người dùng yêu cầu Codex trực tiếp triển khai trong khi chờ xác minh nghiệp vụ 1Office.
+- Đọc lại thay đổi Anti: đã có GpsLocation/EmployeeGpsLocation và API mobile; tái sử dụng schema, không sửa luồng chấm công hay .env.
+- Thêm trang /hrm/attendance/settings và nối nút Cài đặt của timesheet-screen. Menu hai mục, bảng có tìm kiếm/phân trang/cuộn ngang, tạo/sửa, xuất kết quả đang lọc ra CSV có chống công thức bảng tính.
+- Ca dùng Shift hiện có; nhập giờ, qua ngày, khoảng nghỉ, tổng công, ghi chú. Backend tính tổng giờ, kiểm tra khoảng nghỉ nằm trong ca. Không thay thuật toán tính công.
+- GPS dùng dữ liệu thật; tạo nhiều dòng atomic, trùng mã trả lỗi, kiểm tọa độ/bán kính, sửa trạng thái, xem liên kết Google Maps. Hiển thị nhân viên đã được gán để tham khảo, chưa chỉnh đối tượng áp dụng. API mới kế thừa admin.access của AttendanceController.
+- Giới hạn: chưa Import XLSX; nút Import khóa rõ ràng. Chưa Wifi, chọn điểm bản đồ trong form, ghi chú GPS riêng, hoạt động ca, cửa sổ checkin/out, linh hoạt/OT/tự nhận ca. Không tạo cột cấu hình giả. Quy tắc GPS fallback công ty của Anti giữ nguyên, cần xác minh trước nghiệm thu.
+- File chính: admin-web/src/features/attendance/settings-screen.tsx, settings.css; app/hrm/attendance/settings/page.tsx; backend attendance.controller/service và settings-validation.ts; test/attendance-settings.test.ts.
+- Kiểm tra: TypeScript backend và admin-web đạt; 4 test validation thực sự gọi helper production đạt (ca ngày, qua đêm, giờ nghỉ sai, tọa độ/bán kính sai). Chưa kiểm thử trình duyệt hoặc ghi dữ liệu thật qua API trong lượt này. Chưa commit/push.
+
+## 2026-09-23 — Codex: cập nhật theo xác minh ca/GPS
+
+- Bổ sung `Shift.overnight`, `checkInBefore`, `checkOutAfter` và bảng nối `ShiftGpsLocation`; migration `202609230002_attendance_settings` chưa áp dụng vào DB trong lượt này.
+- Form ca có chọn nhiều địa điểm GPS; backend lưu quan hệ khi tạo/cập nhật. Validator hiểu khoảng check-in/out dạng `HH:mm` hoặc `HH:mm:ss` nhưng chưa đưa cửa sổ này vào thuật toán ghép log.
+- TypeScript backend/admin-web và 4 test validation đạt. Chưa chạy `prisma migrate deploy`, chưa kiểm tra browser/API live, chưa commit/push.
