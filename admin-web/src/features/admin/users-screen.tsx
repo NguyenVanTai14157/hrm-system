@@ -102,19 +102,6 @@ const USER_ROLES_DATA: UserRolePackage[] = [
   },
 ];
 
-const MOCK_1OFFICE_USERS = [
-  { id: 'u-admin', username: 'admin', group: '--', employeeCode: '--', displayName: 'Admin', department: '--', digitalSignature: '--', createdAt: '--', activatedAt: '--', combo: '--', apps: '--', status: 'ACTIVE', phone: '0901234567', email: 'admin@system.com', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-thuntm', username: 'thuntm', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '119', displayName: 'Nguyễn Trần Minh Thư', department: 'CỬA HÀNG 93', digitalSignature: '--', createdAt: '12/07/2026', activatedAt: '12/07/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0931917308', email: 'thuntm@hadibeauty.vn', isCustomPermission: true, twoFactorMethod: 'SMART_OTP' },
-  { id: 'u-danvhl', username: 'danvhl', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '120', displayName: 'Võ Huyền Linh Đan', department: 'CỬA HÀNG 108', digitalSignature: '--', createdAt: '02/08/2026', activatedAt: '02/08/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0935123456', email: 'danvhl@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-quyendnb', username: 'quyendnb', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '122', displayName: 'Đào Nguyễn Bảo Quyên', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '10/08/2026', activatedAt: '10/08/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0914987654', email: 'quyendnb@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'EMAIL' },
-  { id: 'u-tienhnt', username: 'tienhnt', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '121', displayName: 'Hoàng Nguyễn Thủy Tiên', department: 'Hadi Beauty Đà Nẵng › CỬA HÀNG 126', digitalSignature: '--', createdAt: '03/08/2026', activatedAt: '03/08/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0931917308', email: 'tientlien158203@gmail.com', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-phuonghv', username: 'phuonghv', group: 'Nhân viên kho hàng - Nhân viên', employeeCode: '99', displayName: 'Huỳnh Văn Phương', department: 'KHO HÀNG', digitalSignature: '--', createdAt: '03/02/2025', activatedAt: '03/02/2025', combo: 'Professional (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0988776655', email: 'phuonghv@hadibeauty.vn', isCustomPermission: true, twoFactorMethod: 'SMS' },
-  { id: 'u-lyntk', username: 'lyntk', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '115', displayName: 'Nguyễn Thị Khánh Ly', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '29/04/2026', activatedAt: '29/04/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0977112233', email: 'lyntk@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-tramttn', username: 'tramttn', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '95', displayName: 'Trần Thị Ngọc Trâm', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '29/10/2024', activatedAt: '29/10/2024', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0966445566', email: 'tramttn@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-ngoanpth', username: 'ngoanpth', group: 'Quản lý cửa hàng - Quản lý', employeeCode: '67', displayName: 'Phan Thị Hoàng Ngoan', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '24/11/2022', activatedAt: '24/11/2022', combo: '1Office (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0955332211', email: 'ngoanpth@hadibeauty.vn', isCustomPermission: true, twoFactorMethod: 'SMART_OTP' },
-  { id: 'u-uyenvt', username: 'uyenvt', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '116', displayName: 'Võ Trang Uyên', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '02/05/2026', activatedAt: '02/05/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0944889900', email: 'uyenvt@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'OFF' },
-  { id: 'u-nhunq', username: 'nhunq', group: 'Nhân viên bán hàng - Nhân viên', employeeCode: '114', displayName: 'Nguyễn Quỳnh Như', department: 'CỬA HÀNG 126', digitalSignature: '--', createdAt: '29/04/2026', activatedAt: '29/04/2026', combo: 'Standard Hrm (01/04/2027)', apps: '--', status: 'ACTIVE', phone: '0933221100', email: 'nhunq@hadibeauty.vn', isCustomPermission: false, twoFactorMethod: 'OFF' },
-];
 
 interface MatrixRowItem {
   id: string;
@@ -145,11 +132,13 @@ const DEFAULT_PERMISSION_MATRIX: MatrixRowItem[] = [
 export function UsersScreen() {
   const { message } = App.useApp();
   const [statusTab, setStatusTab] = useState<'ACTIVE' | 'LOCKED' | 'UNACTIVATED' | 'PENDING' | 'DEVICE'>('ACTIVE');
-  const [users, setUsers] = useState<any[]>(MOCK_1OFFICE_USERS);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  
+  // Ngăn double-submit khi đang xóa
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+
   // Selection for User Detail View
   const [selectedUserDetail, setSelectedUserDetail] = useState<any | null>(null);
 
@@ -186,11 +175,11 @@ export function UsersScreen() {
     try {
       setLoading(true);
       const res = await apiClient.get('/users');
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+      if (res.data && Array.isArray(res.data)) {
         const backendUsers = res.data.map((u: any) => ({
           id: u.id,
           username: u.username,
-          group: u.roles?.[0]?.role?.name || 'Nhân viên bán hàng - Nhân viên',
+          group: u.roles?.[0]?.role?.name || '--',
           employeeCode: u.employee?.code || '--',
           displayName: u.displayName || u.employee?.name || u.username,
           department: u.employee?.department?.name || '--',
@@ -198,51 +187,70 @@ export function UsersScreen() {
           digitalSignature: '--',
           createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '--',
           activatedAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '--',
-          combo: 'Standard Hrm (01/04/2027)',
+          combo: '--',
           apps: '--',
           status: u.status || 'ACTIVE',
           phone: u.employee?.phone || '--',
-          email: u.employee?.email || `${u.username}@hadibeauty.vn`,
+          email: u.employee?.email || '--',
           hometown: u.employee?.hometown || '--',
           birthday: u.employee?.birthday ? new Date(u.employee.birthday).toLocaleDateString('vi-VN') : '--',
           isCustomPermission: u.isCustomPermission || false,
           twoFactorMethod: u.twoFactorMethod || 'OFF'
         }));
-        
-        const existingIds = new Set(backendUsers.map((u: any) => u.username));
-        const filteredMock = MOCK_1OFFICE_USERS.filter(m => !existingIds.has(m.username));
-        setUsers([...backendUsers, ...filteredMock]);
+        setUsers(backendUsers);
+      } else {
+        setUsers([]);
       }
-    } catch (error) {
-      console.log('Using default 1Office mock users set');
+    } catch (error: any) {
+      const errMsg = error?.response?.data?.message || 'Không thể tải danh sách người dùng';
+      message.error(errMsg);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
   };
 
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    const deptsFromUsers = users
-      .map(u => u.department)
-      .filter(d => d && d !== '--');
-
-    apiClient.get('/employee-catalogs?kind=DEPARTMENT').then(res => {
-      let catalogDepts: string[] = [];
+  const fetchDepartments = async () => {
+    try {
+      // Chỉ lấy đúng loại DEPARTMENT, đang hoạt động, từ API — không merge với dữ liệu users
+      const res = await apiClient.get('/employee-catalogs?kind=DEPARTMENT&active=true');
       if (res.data && Array.isArray(res.data)) {
-        catalogDepts = res.data.map((c: any) => c.name).filter(Boolean);
+        const depts = res.data
+          .filter((c: any) => c.kind === 'DEPARTMENT' && c.active !== false)
+          .map((c: any) => ({ id: c.id, name: c.name }));
+        setDepartmentOptions(depts);
       }
-      const allDepts = Array.from(new Set([...catalogDepts, ...deptsFromUsers])).sort();
-      setDepartmentOptions(allDepts);
-    }).catch(() => {
-      const allDepts = Array.from(new Set(deptsFromUsers)).sort();
-      setDepartmentOptions(allDepts);
-    });
-  }, [users]);
+    } catch {
+      // Khi API lỗi: bộ lọc trống, không dùng fallback giả
+      setDepartmentOptions([]);
+    }
+  };
+
+  const [employeeOptions, setEmployeeOptions] = useState<{ id: string; code: string; name: string; email?: string }[]>([]);
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await apiClient.get('/employees?pageSize=200');
+      if (res.data?.data && Array.isArray(res.data.data)) {
+        setEmployeeOptions(res.data.data.map((e: any) => ({
+          id: e.id,
+          code: e.code,
+          name: e.name,
+          email: e.email,
+        })));
+      }
+    } catch {
+      setEmployeeOptions([]);
+    }
+  };
 
   useEffect(() => {
+    fetchDepartments();
     fetchUsers();
+    fetchEmployees();
   }, []);
 
   useEffect(() => {
@@ -257,7 +265,8 @@ export function UsersScreen() {
   }, []);
 
   const handleToggleStatus = async (userRecord: any) => {
-    const newStatus = userRecord.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
+    const originalStatus = userRecord.status;
+    const newStatus = originalStatus === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     setUsers(prev => prev.map(u => u.id === userRecord.id ? { ...u, status: newStatus } : u));
     if (selectedUserDetail?.id === userRecord.id) {
       setSelectedUserDetail({ ...selectedUserDetail, status: newStatus });
@@ -265,37 +274,106 @@ export function UsersScreen() {
     try {
       await apiClient.patch(`/users/${userRecord.id}/status`, { status: newStatus });
       message.success(`Đã ${newStatus === 'ACTIVE' ? 'mở khóa' : 'khóa'} tài khoản ${userRecord.username}`);
-    } catch (err) {
-      message.info(`Đã cập nhật trạng thái tài khoản ${userRecord.username}`);
+    } catch (err: any) {
+      setUsers(prev => prev.map(u => u.id === userRecord.id ? { ...u, status: originalStatus } : u));
+      if (selectedUserDetail?.id === userRecord.id) {
+        setSelectedUserDetail({ ...selectedUserDetail, status: originalStatus });
+      }
+      const errMsg = err?.response?.data?.message || err?.message || 'Không thể cập nhật trạng thái';
+      message.error(`Cập nhật trạng thái tài khoản ${userRecord.username} thất bại: ${errMsg}`);
     }
   };
 
   const handleDeleteUser = (userRecord: any) => {
+    if (deleteInProgress) return;
     Modal.confirm({
       title: <span style={{ color: '#ef4444', fontWeight: 700 }}>🗑️ Xóa vĩnh viễn tài khoản người dùng</span>,
       content: (
         <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 10 }}>
           <p style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ CẢNH BÁO: XÓA LÀ XÓA HOÀN TOÀN KHỎI DATABASE!</p>
-          <p>• <b>Khóa tài khoản:</b> Chỉ vô hiệu hóa đăng nhập, có thể <b>mở khóa lại</b> sau này.</p>
-          <p>• <b>Xóa vĩnh viễn:</b> Xóa trực tiếp bản ghi tài khoản <b>{userRecord.username}</b> khỏi bảng `users` trong cơ sở dữ liệu. KHÔNG THỂ KHÔI PHỤC.</p>
+          <p>• <b>Khóa tài khoản:</b> Vô hiệu hóa đăng nhập tạm thời, có thể <b>mở khóa lại</b> sau này.</p>
+          <p>• <b>Xóa tài khoản:</b> Xóa tài khoản đăng nhập <b style={{ color: '#e83e8c' }}>{userRecord.username}</b> khỏi hệ thống. <b>Hồ sơ nhân sự, lịch phân ca và lịch sử chấm công được giữ nguyên</b>.</p>
           <p style={{ marginTop: 8, color: '#475569' }}>Bạn có chắc chắn muốn XÓA VĨNH VIỄN tài khoản này không?</p>
         </div>
       ),
       okText: 'Xóa vĩnh viễn',
-      okButtonProps: { danger: true },
+      okButtonProps: { danger: true, disabled: deleteInProgress },
       cancelText: 'Hủy',
       onOk: async () => {
+        if (deleteInProgress) return;
+        setDeleteInProgress(true);
         try {
           await apiClient.delete(`/users/${userRecord.id}`);
           message.success(`Đã xóa vĩnh viễn tài khoản ${userRecord.username}`);
           setUsers(prev => prev.filter(u => u.id !== userRecord.id));
+          setSelectedRowKeys(prev => prev.filter(k => k !== userRecord.id));
           if (selectedUserDetail?.id === userRecord.id) {
             setSelectedUserDetail(null);
           }
           await fetchUsers();
-        } catch (err) {
-          setUsers(prev => prev.filter(u => u.id !== userRecord.id));
-          message.success(`Đã xóa vĩnh viễn tài khoản ${userRecord.username}`);
+        } catch (err: any) {
+          const errMsg = err?.response?.data?.message || err?.message || 'Lỗi không xác định';
+          message.error(`Xóa tài khoản ${userRecord.username} thất bại: ${errMsg}`);
+          await fetchUsers();
+        } finally {
+          setDeleteInProgress(false);
+        }
+      },
+    });
+  };
+
+  const handleBulkDeleteUsers = (targetIds: string[]) => {
+    if (deleteInProgress || targetIds.length === 0) return;
+    const targetUsers = users.filter(u => targetIds.includes(u.id));
+    if (targetUsers.length === 0) return;
+    const usernames = targetUsers.map(u => u.username).join(', ');
+    const count = targetUsers.length;
+    Modal.confirm({
+      title: <span style={{ color: '#ef4444', fontWeight: 700 }}>🗑️ Xóa vĩnh viễn {count} tài khoản</span>,
+      content: (
+        <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 10 }}>
+          <p style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ CẢNH BÁO: KHÔNG THỂ KHÔI PHỤC SAU KHI XÓA!</p>
+          <p>Các tài khoản người dùng ({count} tài khoản) sẽ bị xóa vĩnh viễn. <b>Hồ sơ nhân sự, lịch phân ca và lịch sử chấm công được giữ nguyên</b>.</p>
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px', marginTop: 8, maxHeight: 120, overflowY: 'auto' }}>
+            <b>Danh sách tài khoản sẽ xóa:</b>
+            <div style={{ marginTop: 4, color: '#e83e8c', fontWeight: 600, wordBreak: 'break-all' }}>{usernames}</div>
+          </div>
+        </div>
+      ),
+      okText: `Xóa ${count} tài khoản`,
+      okButtonProps: { danger: true, disabled: deleteInProgress },
+      cancelText: 'Hủy',
+      onOk: async () => {
+        if (deleteInProgress) return;
+        setDeleteInProgress(true);
+        try {
+          const res = await apiClient.post('/users/bulk-delete', { ids: targetIds });
+          const { succeeded = [], failed = [] } = res.data || {};
+          const succeededSet = new Set(succeeded as string[]);
+          if (succeededSet.size > 0) {
+            setUsers(prev => prev.filter(u => !succeededSet.has(u.id)));
+            setSelectedRowKeys(prev => prev.filter(k => !succeededSet.has(k as string)));
+            if (selectedUserDetail && succeededSet.has(selectedUserDetail.id)) {
+              setSelectedUserDetail(null);
+            }
+          }
+          if (failed.length === 0) {
+            message.success(`Đã xóa vĩnh viễn ${succeededSet.size} tài khoản thành công.`);
+          } else if (succeededSet.size === 0) {
+            const reasons = (failed as any[]).map((f: any) => `${f.username}: ${f.reason}`).join(' | ');
+            message.error(`Không xóa được tài khoản nào. Lý do: ${reasons}`);
+          } else {
+            const failReasons = (failed as any[]).map((f: any) => `${f.username}: ${f.reason}`).join(' | ');
+            message.warning(`Xóa thành công ${succeededSet.size}/${count} tài khoản. Thất bại: ${failReasons}`);
+          }
+          await fetchUsers();
+          setSelectedRowKeys(prev => prev.filter(k => !targetIds.includes(k as string)));
+        } catch (err: any) {
+          const errMsg = err?.response?.data?.message || err?.message || 'Lỗi không xác định';
+          message.error(`Xóa hàng loạt thất bại: ${errMsg}`);
+          await fetchUsers();
+        } finally {
+          setDeleteInProgress(false);
         }
       },
     });
@@ -325,20 +403,9 @@ export function UsersScreen() {
         ),
         okText: 'ĐÃ HIỂU',
       });
-    } catch (err) {
-      const email = userRecord.email || `${userRecord.username}@hadibeauty.vn`;
-      Modal.info({
-        title: <span style={{ color: '#e83e8c', fontWeight: 700 }}>✉️ Gửi mật khẩu tự động (1Office Auto)</span>,
-        content: (
-          <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 10 }}>
-            <p>Hệ thống đã tự sinh mật khẩu ngẫu nhiên và gửi email thông tin đăng nhập tới: <strong>{email}</strong></p>
-            <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', padding: '8px 12px', borderRadius: 6, color: '#d48806', marginTop: 10, fontSize: 12 }}>
-              ⚠️ <strong>Lưu ý 1Office:</strong> Mật khẩu do hệ thống tự sinh ngẫu nhiên. Không gửi tự động qua tin nhắn SMS.
-            </div>
-          </div>
-        ),
-        okText: 'ĐÃ HIỂU',
-      });
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Không thể gửi mật khẩu';
+      message.error(`Gửi mật khẩu thất bại: ${errMsg}`);
     }
   };
 
@@ -351,10 +418,9 @@ export function UsersScreen() {
       message.success(`Đã cập nhật mật khẩu mới cho tài khoản ${selectedUserDetail.username}`);
       setChangePasswordModalOpen(false);
       passForm.resetFields();
-    } catch (err) {
-      message.success(`Đã cập nhật mật khẩu mới cho tài khoản ${selectedUserDetail.username}`);
-      setChangePasswordModalOpen(false);
-      passForm.resetFields();
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Không thể đổi mật khẩu';
+      message.error(`Đổi mật khẩu thất bại: ${errMsg}`);
     } finally {
       setModalLoading(false);
     }
@@ -365,10 +431,11 @@ export function UsersScreen() {
     try {
       await apiClient.post('/users', {
         username: values.username,
-        employeeId: values.employeeId || 'emp-demo',
-        displayName: values.username,
-        password: values.password || '123456aA@',
+        employeeId: values.employeeId || undefined,
+        displayName: values.displayName || values.username,
+        password: values.password || undefined,
         roleName: values.roleName || selectedRole?.name || 'Nhân viên bán hàng - Nhân viên',
+        sendEmail: values.sendEmail,
       });
       if (selectedUserDetail) {
         await apiClient.patch(`/users/${selectedUserDetail.id}/role`, {
@@ -376,35 +443,14 @@ export function UsersScreen() {
         }).catch(() => {});
       }
       message.success(`Đã kích hoạt tài khoản ${values.username} thành công`);
-      await fetchUsers();
-    } catch (err) {
-      const newUser = {
-        id: `u-${Date.now()}`,
-        username: values.username,
-        group: selectedRole?.name || 'Nhân viên bán hàng - Nhân viên',
-        employeeCode: '130',
-        displayName: values.username,
-        department: 'CỬA HÀNG 126',
-        position: 'Nhân viên nhận Order - Back 126PT',
-        digitalSignature: '--',
-        createdAt: '18/09/2026',
-        activatedAt: '18/09/2026',
-        combo: selectedRole?.comboName ? `${selectedRole.comboName} (01/04/2027)` : '--',
-        apps: '--',
-        status: 'ACTIVE',
-        phone: '0931917308',
-        email: `${values.username}@hadibeauty.vn`,
-        hometown: '--',
-        birthday: '--',
-        isCustomPermission: false,
-        twoFactorMethod: 'OFF'
-      };
-      setUsers(prev => [newUser, ...prev]);
-      message.success(`Đã kích hoạt tài khoản ${values.username} thành công`);
-    } finally {
-      setModalLoading(false);
       setActivateModalOpen(false);
       form.resetFields();
+      await fetchUsers();
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Không thể kích hoạt tài khoản';
+      message.error(`Kích hoạt tài khoản thất bại: ${errMsg}`);
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -459,7 +505,8 @@ export function UsersScreen() {
       u.employeeCode.toLowerCase().includes(search.toLowerCase()) ||
       u.department.toLowerCase().includes(search.toLowerCase());
 
-    const matchDept = departmentFilter === 'ALL' || (u.department && u.department.toLowerCase().includes(departmentFilter.toLowerCase()));
+    // Lọc đúng theo tên phòng ban (so sánh chính xác, không partial-match giảa các phòng ban)
+    const matchDept = departmentFilter === 'ALL' || u.department === departmentFilter;
 
     if (!matchSearch || !matchDept) return false;
     if (statusTab === 'ACTIVE') return u.status === 'ACTIVE';
@@ -1161,7 +1208,7 @@ export function UsersScreen() {
             placeholder="Lọc theo phòng ban"
             options={[
               { value: 'ALL', label: '🏢 Tất cả phòng ban' },
-              ...departmentOptions.map(dept => ({ value: dept, label: `🏢 ${dept}` }))
+              ...departmentOptions.map(dept => ({ value: dept.name, label: `🏢 ${dept.name}` }))
             ]}
           />
           <Input
@@ -1177,8 +1224,31 @@ export function UsersScreen() {
 
       {/* Table Sub-bar Info */}
       <div className="admin-table-subbar">
-        <div style={{ color: '#64748b', fontSize: 13 }}>
-          Hiển thị {filteredUsers.length === 0 ? 0 : `1 - ${filteredUsers.length}`} / {users.length} bản ghi
+        <div style={{ color: '#64748b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span>Hiển thị {filteredUsers.length === 0 ? 0 : `1 - ${filteredUsers.length}`} / {users.length} bản ghi</span>
+          {selectedRowKeys.length > 0 && (
+            <button
+              disabled={deleteInProgress}
+              onClick={() => handleBulkDeleteUsers(selectedRowKeys as string[])}
+              style={{
+                background: deleteInProgress ? '#f87171' : '#ef4444',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: deleteInProgress ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: deleteInProgress ? 0.7 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              🗑️ Xóa đã chọn ({selectedRowKeys.length})
+            </button>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b' }}>
           <span
@@ -1282,14 +1352,23 @@ export function UsersScreen() {
 
           <div
             className="menu-item"
-            style={{ color: '#ef4444', fontWeight: 600 }}
+            style={{ color: '#ef4444', fontWeight: 600, opacity: deleteInProgress ? 0.5 : 1, cursor: deleteInProgress ? 'not-allowed' : 'pointer' }}
             onClick={() => {
+              if (deleteInProgress) return;
               const rec = contextMenu.record;
               setContextMenu(null);
-              handleDeleteUser(rec);
+              // Nếu record thuộc nhóm đã chọn → xóa cả nhóm
+              if (selectedRowKeys.length > 1 && selectedRowKeys.includes(rec.id)) {
+                handleBulkDeleteUsers(selectedRowKeys as string[]);
+              } else {
+                handleDeleteUser(rec);
+              }
             }}
           >
-            <span>🗑️</span> Xóa vĩnh viễn tài khoản
+            <span>🗑️</span> {selectedRowKeys.length > 1 && selectedRowKeys.includes(contextMenu.record.id)
+              ? `Xóa vĩnh viễn ${selectedRowKeys.length} tài khoản đã chọn`
+              : 'Xóa vĩnh viễn tài khoản'
+            }
           </div>
         </div>
       )}
@@ -1304,6 +1383,28 @@ export function UsersScreen() {
         destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleCreateUserSubmit} style={{ marginTop: 16 }}>
+          <Form.Item name="employeeId" label="Liên kết hồ sơ nhân sự (tùy chọn)">
+            <Select
+              allowClear
+              placeholder="-- Chọn nhân sự để liên kết tài khoản --"
+              showSearch
+              filterOption={(input, option) =>
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+              }
+              options={employeeOptions.map(e => ({
+                value: e.id,
+                label: `${e.code} - ${e.name}${e.email ? ` (${e.email})` : ''}`
+              }))}
+              onChange={(empId) => {
+                const emp = employeeOptions.find(e => e.id === empId);
+                if (emp) {
+                  form.setFieldsValue({
+                    username: emp.code ? emp.code.toLowerCase() : '',
+                  });
+                }
+              }}
+            />
+          </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev.autoUsername !== curr.autoUsername}>
             {() => {
               const isAuto = form.getFieldValue('autoUsername') !== false;

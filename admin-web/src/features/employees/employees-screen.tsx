@@ -687,7 +687,7 @@ export function EmployeesScreen() {
       router.push('/hrm/employees/create');
       return;
     }
-    form.resetFields();form.setFieldsValue(row ?? {status:'WORKING'});setEditor(row ?? 'new');void searchManagers();
+    router.push(`/hrm/employees/create?id=${row.id}`);
   }
   async function save(values:Record<string,unknown>) {
     setSaving(true);
@@ -702,28 +702,44 @@ export function EmployeesScreen() {
   async function showDetail(row:Employee) {
     try {const {data}=await apiClient.get<Employee>(`/employees/${row.id}`);setHistory([]);setHistoryPage(1);setDetail(data);} catch(e){void message.error(authError(e));}
   }
-  function handleDeleteEmployee(emp: Employee) {
+  function handleDeleteEmployee(emp: Employee, targets: Employee[] = [emp]) {
+    const employees = [...new Map(targets.map(row => [row.id, row])).values()];
+    if (!employees.length) return;
     Modal.confirm({
       title: <span style={{ color: '#ef4444', fontWeight: 700 }}>🗑️ Xóa vĩnh viễn tài khoản & hồ sơ nhân sự</span>,
       content: (
         <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 10 }}>
           <p style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ THAO TÁC XÓA KHÔNG THỂ KHÔI PHỤC!</p>
           <p>• <b>Khóa tài khoản:</b> Tạm dừng đăng nhập, có thể <b>mở khóa lại</b> bất cứ lúc nào.</p>
-          <p>• <b>Xóa vĩnh viễn:</b> Xóa hoàn toàn hồ sơ và tài khoản người dùng <b>{emp.name}</b> ({emp.code}) khỏi bảng Database hệ thống.</p>
+          <p>• <b>Xóa vĩnh viễn {employees.length} nhân sự:</b> Xóa hồ sơ và tài khoản của những người sau:</p>
+          <ul style={{ maxHeight: 240, overflowY: 'auto' }}>
+            {employees.map(row => <li key={row.id}>{row.name} ({row.code})</li>)}
+          </ul>
           <p style={{ marginTop: 8, color: '#475569' }}>Bạn có chắc chắn muốn XÓA VĨNH VIỄN không?</p>
         </div>
       ),
-      okText: 'Xóa vĩnh viễn',
+      okText: `Xóa ${employees.length} nhân sự`,
       okButtonProps: { danger: true },
       cancelText: 'Hủy',
       onOk: async () => {
-        try {
-          await apiClient.delete(`/employees/${emp.id}`);
-          message.success(`Đã xóa vĩnh viễn hồ sơ và tài khoản của ${emp.name}`);
-          setRevision((r) => r + 1);
-        } catch (e) {
-          message.error(authError(e));
+        const failures: string[] = [];
+        let deleted = 0;
+        for (const row of employees) {
+          try {
+            await apiClient.delete(`/employees/${row.id}`);
+            deleted++;
+          } catch (e) {
+            failures.push(`${row.name} (${row.code}): ${authError(e)}`);
+          }
         }
+        if (deleted) {
+          void message.success(`Đã xóa ${deleted}/${employees.length} hồ sơ nhân sự và tài khoản liên quan.`);
+          setRevision((r) => r + 1);
+        }
+        if (failures.length) Modal.error({
+          title: `Không xóa được ${failures.length} nhân sự`,
+          content: <ul>{failures.map(failure => <li key={failure}>{failure}</li>)}</ul>,
+        });
       },
     });
   }
@@ -1025,7 +1041,13 @@ export function EmployeesScreen() {
             : '0 hồ sơ'}
         </span>
         {selectedKeys.length > 0 && (
-          <span className="emp-selected-label">{selectedKeys.length} đã chọn</span>
+          <Space>
+            <span className="emp-selected-label">{selectedKeys.length} đã chọn</span>
+            {can('employee.update') && <Button danger icon={<DeleteOutlined />} onClick={() => {
+              const targets = rows.filter(row => selectedKeys.includes(row.id));
+              if (targets.length) handleDeleteEmployee(targets[0], targets);
+            }}>Xóa đã chọn</Button>}
+          </Space>
         )}
       </div>
       <div className="employees-toolbar-right">
@@ -1205,10 +1227,12 @@ export function EmployeesScreen() {
             onClick={() => {
               const rec = contextMenu.record;
               setContextMenu(null);
-              handleDeleteEmployee(rec);
+              handleDeleteEmployee(rec, selectedKeys.includes(rec.id)
+                ? rows.filter(row => selectedKeys.includes(row.id)) : [rec]);
             }}
           >
-            <span>🗑️</span> Xóa vĩnh viễn (TK & Hồ sơ)
+            <span>🗑️</span> {selectedKeys.includes(contextMenu.record.id) && selectedKeys.length > 1
+              ? `Xóa ${selectedKeys.length} nhân sự đã chọn` : 'Xóa vĩnh viễn (TK & Hồ sơ)'}
           </div>
 
           <div className="menu-divider" />

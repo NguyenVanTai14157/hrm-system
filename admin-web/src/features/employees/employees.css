@@ -357,3 +357,17 @@
   background: #e2e8f0;
   margin: 4px 0;
 }
+
+/* ── Locked Auto-Generated Code Inputs (1Office Style) ── */
+.locked-auto-code-input,
+.locked-auto-code-input.ant-input-disabled,
+.locked-auto-code-input[disabled] {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  -webkit-text-fill-color: #1e293b !important;
+  font-weight: 600 !important;
+  cursor: not-allowed !important;
+  border-color: #cbd5e1 !important;
+  border-radius: 6px !important;
+}
+

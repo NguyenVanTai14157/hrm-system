@@ -159,6 +159,132 @@ function groupAssignmentsToRules(assignments: any[]): ShiftRuleItem[] {
   return result;
 }
 
+/**
+ * Tính toán thời lượng ca làm việc thực tế (giờ).
+ * Tự động tính từ giờ vào/ra, xử lý qua ngày (overnight), trừ khoảng nghỉ.
+ * Check-in trước / check-out sau tuyệt đối KHÔNG được cộng vào giờ làm.
+ * Hỗ trợ nhiều khoảng làm việc và loại bỏ trùng lặp (tránh tính trùng).
+ */
+export function calculateShiftDurationHours(
+  startTime?: any,
+  endTime?: any,
+  overnight: string | boolean = false,
+  breakStart?: any,
+  breakEnd?: any,
+  multipleIntervals = false,
+  intervals?: any[]
+): number {
+  const parseMin = (val: any): number | null => {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (dayjs.isDayjs(val)) {
+      if (!val.isValid()) return null;
+      return val.hour() * 60 + val.minute();
+    }
+    if (typeof val === 'object') {
+      if (typeof val.hour === 'function' && typeof val.minute === 'function') {
+        const h = val.hour();
+        const m = val.minute();
+        if (typeof h === 'number' && typeof m === 'number' && !isNaN(h) && !isNaN(m)) {
+          return h * 60 + m;
+        }
+      }
+      if (typeof val.$H === 'number' && typeof val.$m === 'number') {
+        return val.$H * 60 + val.$m;
+      }
+      if (typeof val.format === 'function') {
+        try {
+          const strVal = val.format('HH:mm');
+          const match = strVal.match(/(\d{1,2}):(\d{2})/);
+          if (match) return Number(match[1]) * 60 + Number(match[2]);
+        } catch {}
+      }
+    }
+    let str = typeof val === 'string' ? val.trim() : '';
+    if (!str) return null;
+    if (str.includes('T')) {
+      const d = dayjs(str);
+      if (d.isValid()) return d.hour() * 60 + d.minute();
+      const timePart = str.split('T')[1];
+      if (timePart) str = timePart;
+    }
+    const match = str.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  };
+
+  if (multipleIntervals && Array.isArray(intervals) && intervals.length > 0) {
+    interface Range { start: number; end: number; }
+    const ranges: Range[] = [];
+    for (const it of intervals) {
+      if (!it) continue;
+      const s = parseMin(it.startTime);
+      let e = parseMin(it.endTime);
+      if (s !== null && e !== null) {
+        if (e <= s) e += 1440;
+        let dur = e - s;
+        const bm = Number(it.breakMinutes) || 0;
+        dur = Math.max(0, dur - bm);
+        ranges.push({ start: s, end: s + dur });
+      }
+    }
+    if (ranges.length === 0) return 0;
+    ranges.sort((a, b) => a.start - b.start);
+    const merged: Range[] = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+      const prev = merged[merged.length - 1];
+      const cur = ranges[i];
+      if (cur.start <= prev.end) {
+        prev.end = Math.max(prev.end, cur.end);
+      } else {
+        merged.push(cur);
+      }
+    }
+    const totalMinutes = merged.reduce((acc, r) => acc + (r.end - r.start), 0);
+    return Math.round((totalMinutes / 60) * 100) / 100;
+  }
+
+  const s = parseMin(startTime);
+  let e = parseMin(endTime);
+  if (s === null || e === null) return 0;
+
+  const isOvernight = overnight === 'Có' || overnight === true || overnight === 'next' || e < s;
+  if (isOvernight && e <= s) {
+    e += 1440;
+  }
+
+  let workMin = Math.max(0, e - s);
+
+  const bs = parseMin(breakStart);
+  let be = parseMin(breakEnd);
+  if (bs !== null && be !== null) {
+    if (isOvernight) {
+      let adjBs = bs;
+      let adjBe = be;
+      if (adjBs < s) adjBs += 1440;
+      if (adjBe <= adjBs) adjBe += 1440;
+      const effBs = Math.max(s, adjBs);
+      const effBe = Math.min(e, adjBe);
+      if (effBe > effBs) {
+        workMin = Math.max(0, workMin - (effBe - effBs));
+      }
+    } else {
+      if (be > bs) {
+        const effBs = Math.max(s, bs);
+        const effBe = Math.min(e, be);
+        if (effBe > effBs) {
+          workMin = Math.max(0, workMin - (effBe - effBs));
+        }
+      }
+    }
+  }
+
+  return Math.round((workMin / 60) * 100) / 100;
+}
+
 export function ShiftsScreen() {
   const { message } = App.useApp();
   const [shiftRules, setShiftRules] = useState<ShiftRuleItem[]>([]);
@@ -219,6 +345,7 @@ export function ShiftsScreen() {
   // Settings & Shift Template States
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createShiftTemplateModalOpen, setCreateShiftTemplateModalOpen] = useState(false);
+  const [editingShiftTemplate, setEditingShiftTemplate] = useState<any | null>(null);
   const [submittingTemplate, setSubmittingTemplate] = useState(false);
 
   // Catalog option lists
@@ -232,6 +359,7 @@ export function ShiftsScreen() {
 
   const [form] = Form.useForm();
   const [templateForm] = Form.useForm();
+  const watchedMultipleIntervals = Form.useWatch('multipleIntervals', templateForm);
   const currentAssignmentType = Form.useWatch('assignmentType', form);
   const watchedRepeatType = Form.useWatch('repeatType', form) || 'Lập theo tuần';
   const watchedDeptIds: string[] = Form.useWatch('departmentIds', form) || [];
@@ -455,10 +583,17 @@ export function ShiftsScreen() {
 
   // Open "Tạo mới ca làm việc" modal (Image 3 & 4)
   const handleOpenCreateTemplateModal = () => {
+    setEditingShiftTemplate(null);
+    const initialHours = calculateShiftDurationHours('08:00', '17:30', false, '12:00', '13:30');
+    templateForm.resetFields();
     templateForm.setFieldsValue({
       code: '',
       name: '',
       multipleIntervals: false,
+      intervals: [
+        { startTime: dayjs('08:00', 'HH:mm'), endTime: dayjs('12:00', 'HH:mm'), breakMinutes: 0 },
+        { startTime: dayjs('13:30', 'HH:mm'), endTime: dayjs('17:30', 'HH:mm'), breakMinutes: 0 },
+      ],
       active: true,
       startTime: dayjs('08:00', 'HH:mm'),
       endTime: dayjs('17:30', 'HH:mm'),
@@ -466,9 +601,10 @@ export function ShiftsScreen() {
       breakStart: dayjs('12:00', 'HH:mm'),
       breakEnd: dayjs('13:30', 'HH:mm'),
       checkInEarly: dayjs('01:00', 'HH:mm'),
-      checkOutLate: dayjs('04:00', 'HH:mm'),
-      totalHours: '8',
-      standardHours: 1,
+      checkOutLate: dayjs('01:00', 'HH:mm'),
+      totalHours: initialHours,
+      coefficient: 1.0,
+      standardHours: 1.0,
       flexibleOption: 'Không áp dụng',
       recalculateLeave: false,
       autoDetectDept: false,
@@ -483,36 +619,165 @@ export function ShiftsScreen() {
     setCreateShiftTemplateModalOpen(true);
   };
 
-  // Submit "Tạo mới ca làm việc" (Shift template) form
+  // Open "Sửa ca làm việc" modal
+  const handleOpenEditTemplateModal = (shift: any) => {
+    setEditingShiftTemplate(shift);
+    const isOvernight = shift.overnight === true;
+    const durHours = calculateShiftDurationHours(
+      shift.startTime,
+      shift.endTime,
+      isOvernight,
+      shift.breakStart,
+      shift.breakEnd
+    );
+    templateForm.resetFields();
+    templateForm.setFieldsValue({
+      code: shift.code,
+      name: shift.name,
+      multipleIntervals: false,
+      intervals: [
+        { startTime: dayjs('08:00', 'HH:mm'), endTime: dayjs('12:00', 'HH:mm'), breakMinutes: 0 },
+        { startTime: dayjs('13:30', 'HH:mm'), endTime: dayjs('17:30', 'HH:mm'), breakMinutes: 0 },
+      ],
+      active: true,
+      startTime: shift.startTime ? dayjs(shift.startTime, 'HH:mm') : null,
+      endTime: shift.endTime ? dayjs(shift.endTime, 'HH:mm') : null,
+      overnight: isOvernight ? 'Có' : 'Không',
+      breakStart: shift.breakStart ? dayjs(shift.breakStart, 'HH:mm') : null,
+      breakEnd: shift.breakEnd ? dayjs(shift.breakEnd, 'HH:mm') : null,
+      checkInEarly: shift.checkInBefore ? dayjs(shift.checkInBefore.slice(0, 5), 'HH:mm') : dayjs('01:00', 'HH:mm'),
+      checkOutLate: shift.checkOutAfter ? dayjs(shift.checkOutAfter.slice(0, 5), 'HH:mm') : dayjs('01:00', 'HH:mm'),
+      totalHours: durHours > 0 ? durHours : (shift.standardHours || 0),
+      coefficient: shift.coefficient ?? 1.0,
+      standardHours: shift.coefficient ?? 1.0,
+      flexibleOption: 'Không áp dụng',
+      description: shift.description || '',
+      recalculateLeave: false,
+      autoDetectDept: false,
+      autoHoliday: false,
+      autoTimekeep: false,
+      autoCheckout: false,
+      midShiftCheckoutRequired: false,
+      midShiftOvertime: 'NO_ACCEPT',
+      midShiftLateEarly: false,
+      gpsOption: 'Chấm công qua GPS',
+    });
+    setCreateShiftTemplateModalOpen(true);
+  };
+
+  // Delete shift template
+  const handleDeleteShiftTemplate = (shift: any) => {
+    Modal.confirm({
+      title: 'Xác nhận xóa ca làm việc',
+      content: `Bạn có chắc chắn muốn xóa ca "${shift.name}" (${shift.code}) không?`,
+      okText: 'Xóa',
+      okType: 'danger',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          const res = await apiClient.delete(`/attendance/shifts/${shift.id}`);
+          if (res.data?.success === false) {
+            message.error(res.data.message);
+          } else {
+            message.success('Đã xóa ca làm việc thành công');
+            await fetchData();
+          }
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || 'Có lỗi khi xóa ca làm việc');
+        }
+      },
+    });
+  };
+
+  // Khi chọn giờ vào, giờ ra (hoặc qua ngày, giờ nghỉ) -> Tự động tính tổng giờ và tổng công
+  // Người dùng cũng có thể tự nhập/sửa ô tổng giờ và tổng công tùy ý
+  const handleTemplateFormValuesChange = (changedValues: any, allValues: any) => {
+    if (
+      'startTime' in changedValues ||
+      'endTime' in changedValues ||
+      'overnight' in changedValues ||
+      'breakStart' in changedValues ||
+      'breakEnd' in changedValues
+    ) {
+      const dur = calculateShiftDurationHours(
+        allValues.startTime,
+        allValues.endTime,
+        allValues.overnight,
+        allValues.breakStart,
+        allValues.breakEnd
+      );
+      if (dur > 0) {
+        // Tự động tính tổng công tương ứng: ca chuẩn >= 7h = 1 công, ca >= 3.5h = 0.5 công, khác tính theo tỷ lệ
+        const autoCong = dur >= 7 ? 1 : dur >= 3.5 ? 0.5 : Math.round((dur / 8) * 100) / 100;
+        templateForm.setFieldsValue({
+          totalHours: dur,
+          standardHours: autoCong,
+        });
+      }
+    }
+  };
+
+  // Submit "Tạo mới / Sửa ca làm việc" (Shift template) form
   const handleCreateShiftTemplateSubmit = async (values: any) => {
     setSubmittingTemplate(true);
     try {
       const startTimeStr = values.startTime ? dayjs(values.startTime).format('HH:mm') : '08:00';
       const endTimeStr = values.endTime ? dayjs(values.endTime).format('HH:mm') : '17:30';
-      const breakStartStr = values.breakStart ? dayjs(values.breakStart).format('HH:mm') : '12:00';
-      const breakEndStr = values.breakEnd ? dayjs(values.breakEnd).format('HH:mm') : '13:30';
+      const breakStartStr = values.breakStart ? dayjs(values.breakStart).format('HH:mm') : null;
+      const breakEndStr = values.breakEnd ? dayjs(values.breakEnd).format('HH:mm') : null;
+      const checkInBeforeStr = values.checkInEarly ? dayjs(values.checkInEarly).format('HH:mm') : null;
+      const checkOutAfterStr = values.checkOutLate ? dayjs(values.checkOutLate).format('HH:mm') : null;
+      const isOvernight = values.overnight === 'Có' || values.overnight === true;
+
+      // Ưu tiên giá trị người dùng tự nhập ở ô "Tổng giờ", nếu không có mới lấy theo giờ tính toán
+      const userTotalHours = parseFloat(values.totalHours);
+      const durationHours = !isNaN(userTotalHours) && userTotalHours > 0
+        ? userTotalHours
+        : calculateShiftDurationHours(
+            startTimeStr,
+            endTimeStr,
+            isOvernight,
+            breakStartStr,
+            breakEndStr
+          );
+
+      // Ưu tiên giá trị người dùng tự nhập ở ô "Tổng công", nếu không có mới lấy 1.0
+      const userStandardHours = parseFloat(values.standardHours ?? values.coefficient);
+      const coefficientVal = !isNaN(userStandardHours) && userStandardHours > 0
+        ? userStandardHours
+        : 1.0;
 
       const payload = {
-        code: values.code || `CA_${Date.now()}`,
-        name: values.name,
+        code: values.code ? values.code.trim() : `CA_${Date.now()}`,
+        name: values.name.trim(),
         startTime: startTimeStr,
         endTime: endTimeStr,
         breakStart: breakStartStr,
         breakEnd: breakEndStr,
-        standardHours: Number(values.standardHours) || 1,
+        overnight: isOvernight,
+        checkInBefore: checkInBeforeStr,
+        checkOutAfter: checkOutAfterStr,
+        standardHours: durationHours,
+        coefficient: coefficientVal,
         graceLateMinutes: 15,
-        color: 'green',
+        color: values.color || 'green',
         description: values.description || '',
       };
 
-      await apiClient.post('/attendance/shifts', payload);
-      message.success('✅ Đã tạo mới ca làm việc thành công!');
+      if (editingShiftTemplate) {
+        await apiClient.put(`/attendance/shifts/${editingShiftTemplate.id}`, payload);
+        message.success('✅ Đã cập nhật ca làm việc thành công!');
+      } else {
+        await apiClient.post('/attendance/shifts', payload);
+        message.success('✅ Đã tạo mới ca làm việc thành công!');
+      }
       setCreateShiftTemplateModalOpen(false);
+      setEditingShiftTemplate(null);
       templateForm.resetFields();
       await fetchData();
     } catch (err: any) {
-      console.error('Lỗi khi tạo mới ca làm việc:', err);
-      message.error(err?.response?.data?.message || 'Có lỗi xảy ra khi tạo mới ca làm việc');
+      console.error('Lỗi khi lưu ca làm việc:', err);
+      message.error(err?.response?.data?.message || 'Có lỗi xảy ra khi lưu ca làm việc');
     } finally {
       setSubmittingTemplate(false);
     }
@@ -1126,47 +1391,90 @@ export function ShiftsScreen() {
 
   // Shift Template Columns (Image 1 Settings table)
   const shiftTemplateColumns = [
-    { title: 'Mã ca', dataIndex: 'code', key: 'code', width: 140 },
+    { title: 'Mã ca', dataIndex: 'code', key: 'code', width: 130 },
     {
       title: 'Tên ca',
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <span style={{ fontWeight: 600, color: '#0f172a' }}>{text}</span>,
     },
-    { title: 'Giờ vào', dataIndex: 'startTime', key: 'startTime', width: 100 },
-    { title: 'Giờ ra', dataIndex: 'endTime', key: 'endTime', width: 100 },
+    { title: 'Giờ vào', dataIndex: 'startTime', key: 'startTime', width: 90 },
+    { title: 'Giờ ra', dataIndex: 'endTime', key: 'endTime', width: 90 },
     {
       title: 'Giờ nghỉ',
       dataIndex: 'breakStart',
       key: 'breakStart',
-      width: 100,
+      width: 90,
       render: (text?: string) => text || '--',
     },
     {
       title: 'Kết thúc nghỉ',
       dataIndex: 'breakEnd',
       key: 'breakEnd',
-      width: 120,
+      width: 110,
       render: (text?: string) => text || '--',
     },
     {
       title: 'Check in trước',
       key: 'checkInEarly',
-      width: 120,
-      render: () => '01:00',
+      width: 110,
+      render: (_: any, r: any) => (r.checkInBefore ? r.checkInBefore.slice(0, 5) : '01:00'),
     },
     {
       title: 'Check out sau',
       key: 'checkOutLate',
-      width: 120,
-      render: () => '04:00',
+      width: 110,
+      render: (_: any, r: any) => (r.checkOutAfter ? r.checkOutAfter.slice(0, 5) : '04:00'),
     },
     {
-      title: 'Tổng công',
+      title: 'Tổng giờ',
       dataIndex: 'standardHours',
       key: 'standardHours',
       width: 100,
-      render: (val?: number) => val || 1,
+      render: (val?: number) => (
+        <span style={{ fontWeight: 600, color: '#0284c7' }}>
+          {val != null ? `${val}h` : '--'}
+        </span>
+      ),
+    },
+    {
+      title: 'Tổng công',
+      dataIndex: 'coefficient',
+      key: 'coefficient',
+      width: 100,
+      render: (val?: number) => (
+        <span style={{ fontWeight: 600, color: '#16a34a' }}>
+          {val != null ? `${val} công` : '1.0 công'}
+        </span>
+      ),
+    },
+    {
+      title: 'Thao tác',
+      key: 'actions',
+      width: 110,
+      render: (_: any, record: any) => (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            size="small"
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => handleOpenEditTemplateModal(record)}
+            style={{ padding: 0, color: '#e83e8c' }}
+          >
+            Sửa
+          </Button>
+          <Button
+            size="small"
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteShiftTemplate(record)}
+            style={{ padding: 0 }}
+          >
+            Xóa
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -2809,29 +3117,35 @@ export function ShiftsScreen() {
         </div>
       </Drawer>
 
-      {/* 📍 BƯỚC 3: Modal "Tạo mới ca làm việc" (Matching Image 3 & 4 Exact Design) */}
+      {/* 📍 BƯỚC 3: Modal "Tạo mới / Sửa ca làm việc" (Matching Image 3 & 4 Exact Design) */}
       <Modal
         title={
           <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
-            Tạo mới ca làm việc
+            {editingShiftTemplate ? `Sửa ca làm việc: ${editingShiftTemplate.name || editingShiftTemplate.code}` : 'Tạo mới ca làm việc'}
           </div>
         }
         open={createShiftTemplateModalOpen}
-        onCancel={() => setCreateShiftTemplateModalOpen(false)}
+        onCancel={() => {
+          setCreateShiftTemplateModalOpen(false);
+          setEditingShiftTemplate(null);
+        }}
         footer={null}
         width={840}
-        destroyOnHidden
-        mask={{ closable: false }}
+        destroyOnClose
+        maskClosable={false}
         keyboard={false}
+        closable={true}
         style={{ top: 20 }}
       >
         <Form
           form={templateForm}
           layout="vertical"
           onFinish={handleCreateShiftTemplateSubmit}
+          onValuesChange={handleTemplateFormValuesChange}
           initialValues={{
             overnight: 'Không',
-            standardHours: 1,
+            coefficient: 1.0,
+            standardHours: 1.0,
             flexibleOption: 'Không áp dụng',
             midShiftOvertime: 'NO_ACCEPT',
             gpsOption: 'Chấm công qua GPS',
@@ -2850,7 +3164,7 @@ export function ShiftsScreen() {
                   label={<span>Mã ca <span style={{ color: '#ef4444' }}>*</span></span>}
                   rules={[{ required: true, message: 'Vui lòng nhập mã ca' }]}
                 >
-                  <Input placeholder="Mã ca" />
+                  <Input placeholder="Mã ca" disabled={!!editingShiftTemplate} />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -2900,12 +3214,12 @@ export function ShiftsScreen() {
                 </Col>
                 <Col span={5}>
                   <Form.Item name="breakStart" label="Giờ nghỉ">
-                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                    <TimePicker format="HH:mm" style={{ width: '100%' }} allowClear />
                   </Form.Item>
                 </Col>
                 <Col span={5}>
                   <Form.Item name="breakEnd" label="Kết thúc nghỉ">
-                    <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                    <TimePicker format="HH:mm" style={{ width: '100%' }} allowClear />
                   </Form.Item>
                 </Col>
               </Row>
@@ -2923,12 +3237,16 @@ export function ShiftsScreen() {
                 </Col>
                 <Col span={6}>
                   <Form.Item name="totalHours" label="Tổng giờ">
-                    <Input readOnly placeholder="8" />
+                    <Input placeholder="8" />
                   </Form.Item>
                 </Col>
                 <Col span={6}>
-                  <Form.Item name="standardHours" label="Tổng công *">
-                    <Input defaultValue="1" />
+                  <Form.Item
+                    name="standardHours"
+                    label="Tổng công *"
+                    rules={[{ required: true, message: 'Vui lòng nhập tổng công' }]}
+                  >
+                    <Input defaultValue="1" placeholder="1" />
                   </Form.Item>
                 </Col>
               </Row>

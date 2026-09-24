@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -11,8 +11,23 @@ export class UsersController {
   }
 
   @Post()
-  async create(@Body() body: { username: string; employeeId: string; displayName?: string; password?: string; roleName?: string }) {
+  async create(@Body() body: { username: string; employeeId?: string; displayName?: string; password?: string; roleName?: string }) {
     return this.usersService.create(body);
+  }
+
+  // Đặt trước @Delete(':id') để tránh bị shadow bởi route tổng quát
+  @Delete('employee/:employeeId')
+  async removeEmployeeAndUser(@Param('employeeId') employeeId: string) {
+    return this.usersService.removeEmployeeAndUser(employeeId);
+  }
+
+  // Bulk delete - đặt trước @Delete(':id')
+  @Post('bulk-delete')
+  async bulkRemove(@Body('ids') ids: string[]) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('Danh sách ID không hợp lệ hoặc rỗng.');
+    }
+    return this.usersService.bulkRemove(ids);
   }
 
   @Patch(':id/role')
@@ -39,10 +54,4 @@ export class UsersController {
   async remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
-
-  @Delete('employee/:employeeId')
-  async removeEmployeeAndUser(@Param('employeeId') employeeId: string) {
-    return this.usersService.removeEmployeeAndUser(employeeId);
-  }
 }
-

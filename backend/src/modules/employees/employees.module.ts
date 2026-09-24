@@ -11,6 +11,7 @@ class EmployeesController {
   constructor(private readonly service: EmployeesService, private readonly usersService: UsersService) {}
   @Get('stats') stats() { return this.service.stats(); }
   @Get('next-code') nextCode() { return this.service.getNextCode(); }
+  @Get('gps-locations') gpsLocations() { return this.service.getGpsLocations(); }
   @Get() list(@Query() query:EmployeeQuery) { return this.service.list(query); }
   @Get(':id') detail(@Param('id',ParseUUIDPipe) id:string) { return this.service.detail(id); }
   @Get(':id/history') history(@Param('id',ParseUUIDPipe) id:string,@Query() query:EmployeeQuery) { return this.service.history(id,query); }
@@ -21,7 +22,9 @@ class EmployeesController {
 @ApiTags('Employee catalogs') @ApiBearerAuth() @Controller('employee-catalogs')
 class CatalogController {
   constructor(private readonly service:EmployeesService) {}
-  @Get() list() { return this.service.catalogs(); }
+  @Get() list(@Query('kind') kind?: string, @Query('active') active?: string) {
+    return this.service.catalogs(kind as any, active);
+  }
   @Post() @RequirePermissions('employee.catalog.manage') create(@Body() dto:CatalogDto, @Req() req: AuthRequest) {
     if (!dto.creatorName && req?.auth?.user?.displayName) {
       dto.creatorName = req.auth.user.displayName;

@@ -421,6 +421,7 @@ model Shift {
   standardHours    Float    @default(8)
   coefficient      Float    @default(1.0)
   graceLateMinutes Int      @default(15)
+  flexibleMinutes  Int      @default(0)
   color            String   @default("green") @db.VarChar(30)
   description      String?  @db.VarChar(255)
   overnight        Boolean  @default(false)

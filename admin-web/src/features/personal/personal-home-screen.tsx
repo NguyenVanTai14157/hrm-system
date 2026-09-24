@@ -443,10 +443,10 @@ export function PersonalHomeScreen() {
                   <ClockCircleOutlined style={{ fontSize: 13, color: '#0284c7' }} />
                   <span style={{ textDecoration: 'underline dotted' }}>
                     {todayLog?.checkIn
-                      ? `Ca: ${todayShift?.name || 'Hành chính'} • Vào: ${checkInTime} • Xem chi tiết »`
+                      ? `Ca: ${todayShift?.name || 'Chưa phân ca'} • Vào: ${checkInTime} • Xem chi tiết »`
                       : todayShift
                       ? `Ca: ${todayShift.name} (${todayShift.startTime} - ${todayShift.endTime}) • Xem chi tiết »`
-                      : 'Chưa có dữ liệu chấm công • Bấm xem chi tiết »'}
+                      : 'Chưa được phân ca làm việc • Bấm xem chi tiết »'}
                   </span>
                 </div>
               </>
@@ -483,21 +483,21 @@ export function PersonalHomeScreen() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Ca làm việc:</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b' }}>
-                {todayShift?.name || 'Ca Hành chính'}
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: todayShift ? '#1e293b' : '#94a3b8' }}>
+                {todayShift?.name || 'Chưa được phân ca'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Khung giờ ca:</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#0284c7' }}>
-                {todayShift?.startTime || '08:00'} - {todayShift?.endTime || '17:30'}
+              <span style={{ fontSize: 13, fontWeight: 600, color: todayShift ? '#0284c7' : '#94a3b8' }}>
+                {todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} - ${todayShift.endTime}` : '--:--'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>Vị trí áp dụng:</span>
               <span style={{ fontSize: 13, color: '#334155' }}>
-                <EnvironmentOutlined style={{ color: '#ef4444', marginRight: 4 }} />
-                {todayShift?.location || homeData?.employee?.gpsLocation || 'Chưa thiết lập'}
+                <EnvironmentOutlined style={{ color: todayShift ? '#ef4444' : '#94a3b8', marginRight: 4 }} />
+                {todayShift?.location || (todayShift ? (homeData?.employee?.gpsLocation || 'Chưa thiết lập') : 'Chưa được phân ca')}
               </span>
             </div>
           </div>
@@ -535,13 +535,27 @@ export function PersonalHomeScreen() {
             <div className="personal-info-row">
               <span className="personal-info-label">Đi muộn / Về sớm:</span>
               <span className="personal-info-value">
-                {todayAtt?.lateMinutes > 0 ? (
-                  <Tag color="red">Muộn {todayAtt.lateMinutes}p</Tag>
+                {!todayLog?.checkIn && !todayLog?.checkOut ? (
+                  <Tag color="default">Chưa chấm công</Tag>
                 ) : (
-                  <Tag color="green">Đúng giờ</Tag>
-                )}
-                {todayAtt?.earlyMinutes > 0 && (
-                  <Tag color="orange">Sớm {todayAtt.earlyMinutes}p</Tag>
+                  <>
+                    {todayAtt?.lateMinutes > 0 ? (
+                      <Tag color="red">Muộn {todayAtt.lateMinutes}p</Tag>
+                    ) : (
+                      todayLog?.checkIn && <Tag color="green">Đúng giờ</Tag>
+                    )}
+                    {todayAtt?.earlyMinutes > 0 ? (
+                      <Tag color="orange">Sớm {todayAtt.earlyMinutes}p</Tag>
+                    ) : (
+                      todayLog?.checkOut && <Tag color="green">Đúng giờ về</Tag>
+                    )}
+                    {!todayLog?.checkOut && todayLog?.checkIn && (
+                      <Tag color="blue">Đang làm việc</Tag>
+                    )}
+                    {!todayLog?.checkIn && todayLog?.checkOut && (
+                      <Tag color="orange">Thiếu chấm vào</Tag>
+                    )}
+                  </>
                 )}
               </span>
             </div>

@@ -418,8 +418,8 @@ export function PersonalGpsScreen() {
               {/* Header: Shift Name & Date */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', textTransform: 'uppercase' }}>
-                    {todayShift?.name || 'Ca Hành Chính'}
+                  <span style={{ fontSize: 15, fontWeight: 700, color: todayShift ? '#0f172a' : '#64748b', textTransform: 'uppercase' }}>
+                    {todayShift?.name || 'Chưa được phân ca'}
                   </span>
                   <InfoCircleOutlined style={{ color: '#f59e0b', fontSize: 14 }} />
                 </div>
@@ -431,7 +431,7 @@ export function PersonalGpsScreen() {
 
               {/* Subtitle: Department / Timesheet name */}
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-                {employee?.department?.name ? `Bảng công ${employee.department.name}` : 'Bảng công toàn bộ công ty'}
+                {employee?.department?.name ? `Bảng công ${employee.department.name}` : 'Bảng công'}
               </div>
 
               {/* Shift Hours Row */}
@@ -449,22 +449,22 @@ export function PersonalGpsScreen() {
                 >
                   <ClockCircleOutlined style={{ color: '#f59e0b', fontSize: 13 }} />
                 </div>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>
-                  {todayShift ? `${todayShift.startTime} - ${todayShift.endTime}` : '08:00 - 17:30'}
+                <span style={{ fontSize: 15, fontWeight: 700, color: todayShift ? '#1e293b' : '#94a3b8' }}>
+                  {todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} - ${todayShift.endTime}` : '--:--'}
                 </span>
               </div>
 
               {/* Assigned Locations List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {assignedLocations.length === 0 ? (
-                  employee?.gpsLocation || todayShift?.location ? (
+                  todayShift && (employee?.gpsLocation || todayShift?.location) ? (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       <div style={{ marginTop: 2 }}>
                         <CheckCircleFilled style={{ color: '#10b981', fontSize: 18 }} />
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>
-                          {employee?.gpsLocation || todayShift?.location}
+                          {todayShift?.location || employee?.gpsLocation}
                         </div>
                         <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                           Bán kính: 2000 m
@@ -473,7 +473,7 @@ export function PersonalGpsScreen() {
                     </div>
                   ) : (
                     <div style={{ fontSize: 12.5, color: '#94a3b8' }}>
-                      Chưa có địa điểm GPS phân công cho tài khoản này.
+                      {todayShift ? 'Chưa có địa điểm GPS phân công cho ca này.' : 'Chưa được phân ca làm việc cho ngày này.'}
                     </div>
                   )
                 ) : (

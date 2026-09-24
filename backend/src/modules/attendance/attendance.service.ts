@@ -1,6 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { gpsInput, shiftInput } from './settings-validation';
+import {
+  calculateAttendanceMetrics as calculateAttendanceMetricsEngine,
+  calculateShiftAttendanceWithLeave,
+  isShiftEnded,
+  LeaveSegmentInput,
+  AttendanceCalculationResult,
+} from './attendance-calculation';
 
 @Injectable()
 export class AttendanceService {
@@ -50,19 +57,69 @@ export class AttendanceService {
     return this.prisma.client.shift.findMany({ orderBy: { name: 'asc' }, include: { gpsLocations: { include: { gpsLocation: true } } } });
   }
 
+  // Helper to compute shift standard hours dynamically from schedule boundaries
+  calculateShiftStandardHours(
+    startTime?: string | null,
+    endTime?: string | null,
+    overnight = false,
+    breakStart?: string | null,
+    breakEnd?: string | null,
+  ): number {
+    if (!startTime || !endTime) return 0;
+    const mins = (v: string) => {
+      const parts = v.trim().split(':').map(Number);
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    };
+    const start = mins(startTime);
+    let end = mins(endTime);
+    if (overnight || end <= start) {
+      end += 1440;
+    }
+    let workMinutes = Math.max(0, end - start);
+    if (breakStart && breakEnd && breakStart.trim() && breakEnd.trim()) {
+      let bStart = mins(breakStart);
+      let bEnd = mins(breakEnd);
+      if (overnight || end > 1440) {
+        if (bStart < start) bStart += 1440;
+        if (bEnd <= bStart) bEnd += 1440;
+      }
+      if (bEnd > bStart) {
+        const effStart = Math.max(start, bStart);
+        const effEnd = Math.min(end, bEnd);
+        if (effEnd > effStart) {
+          workMinutes = Math.max(0, workMinutes - (effEnd - effStart));
+        }
+      }
+    }
+    return Math.round((workMinutes / 60) * 100) / 100;
+  }
+
   async createShift(data: {
     code: string;
     name: string;
     startTime: string;
     endTime: string;
-    breakStart?: string;
-    breakEnd?: string;
+    breakStart?: string | null;
+    breakEnd?: string | null;
     standardHours?: number;
     coefficient?: number;
     graceLateMinutes?: number;
+    flexibleMinutes?: number;
     color?: string;
-    description?: string;
+    description?: string | null;
+    overnight?: boolean;
+    checkInBefore?: string | null;
+    checkOutAfter?: string | null;
   }) {
+    const computedHours = this.calculateShiftStandardHours(
+      data.startTime,
+      data.endTime,
+      data.overnight ?? false,
+      data.breakStart,
+      data.breakEnd,
+    );
+    const standardHours = computedHours > 0 ? computedHours : (data.standardHours ?? 8.0);
+
     return this.prisma.client.shift.create({
       data: {
         code: data.code.toUpperCase(),
@@ -71,11 +128,15 @@ export class AttendanceService {
         endTime: data.endTime,
         breakStart: data.breakStart ?? null,
         breakEnd: data.breakEnd ?? null,
-        standardHours: data.standardHours ?? 8,
+        standardHours,
         coefficient: data.coefficient ?? 1.0,
         graceLateMinutes: data.graceLateMinutes ?? 15,
+        flexibleMinutes: data.flexibleMinutes ?? 0,
         color: data.color ?? 'green',
         description: data.description ?? null,
+        overnight: data.overnight ?? false,
+        checkInBefore: data.checkInBefore ?? null,
+        checkOutAfter: data.checkOutAfter ?? null,
       },
     });
   }
@@ -84,15 +145,55 @@ export class AttendanceService {
     name?: string;
     startTime?: string;
     endTime?: string;
-    breakStart?: string;
-    breakEnd?: string;
+    breakStart?: string | null;
+    breakEnd?: string | null;
     standardHours?: number;
     coefficient?: number;
     graceLateMinutes?: number;
+    flexibleMinutes?: number;
     color?: string;
-    description?: string;
+    description?: string | null;
+    overnight?: boolean;
+    checkInBefore?: string | null;
+    checkOutAfter?: string | null;
   }) {
-    return this.prisma.client.shift.update({ where: { id }, data });
+    const existing = await this.prisma.client.shift.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy ca');
+
+    const startTime = data.startTime ?? existing.startTime;
+    const endTime = data.endTime ?? existing.endTime;
+    const overnight = data.overnight !== undefined ? data.overnight : existing.overnight;
+    const breakStart = data.breakStart !== undefined ? data.breakStart : existing.breakStart;
+    const breakEnd = data.breakEnd !== undefined ? data.breakEnd : existing.breakEnd;
+
+    const computedHours = this.calculateShiftStandardHours(
+      startTime,
+      endTime,
+      overnight,
+      breakStart,
+      breakEnd,
+    );
+    const standardHours = computedHours > 0 ? computedHours : (data.standardHours ?? existing.standardHours);
+
+    return this.prisma.client.shift.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.startTime !== undefined && { startTime: data.startTime }),
+        ...(data.endTime !== undefined && { endTime: data.endTime }),
+        ...(data.breakStart !== undefined && { breakStart: data.breakStart }),
+        ...(data.breakEnd !== undefined && { breakEnd: data.breakEnd }),
+        standardHours,
+        ...(data.coefficient !== undefined && { coefficient: data.coefficient }),
+        ...(data.graceLateMinutes !== undefined && { graceLateMinutes: data.graceLateMinutes }),
+        ...(data.flexibleMinutes !== undefined && { flexibleMinutes: data.flexibleMinutes }),
+        ...(data.color !== undefined && { color: data.color }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.overnight !== undefined && { overnight: data.overnight }),
+        ...(data.checkInBefore !== undefined && { checkInBefore: data.checkInBefore }),
+        ...(data.checkOutAfter !== undefined && { checkOutAfter: data.checkOutAfter }),
+      },
+    });
   }
 
   async deleteShift(id: string) {
@@ -389,17 +490,27 @@ export class AttendanceService {
 
   async getTimesheet(month: string) {
     const { startDate, endDate } = this.monthRange(month);
+    const year = startDate.getFullYear();
+    const monthIdx = startDate.getMonth();
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-    const [employees, assignments, logs, approvedApps] = await Promise.all([
+    const [employees, assignments, logs, approvedApps, furloughBalances, mealsList, holidays] = await Promise.all([
       this.prisma.client.employee.findMany({
-        where: { status: 'WORKING' },
-        select: { id: true, code: true, name: true, department: { select: { name: true } } },
+        where: { status: { not: 'STOP_WORKING' } },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          department: { select: { id: true, name: true } },
+          position: { select: { id: true, name: true } },
+          jobTitle: { select: { id: true, name: true } },
+        },
         orderBy: { name: 'asc' },
       }),
       this.prisma.client.shiftAssignment.findMany({
         where: {
           date: { gte: startDate, lt: endDate },
-          status: 'APPROVED',
         },
         include: { shift: true },
       }),
@@ -411,12 +522,20 @@ export class AttendanceService {
           status: 'APPROVED',
         },
       }),
+      this.prisma.client.furloughBalance.findMany({
+        where: { year },
+      }),
+      this.prisma.client.attendanceMeal.findMany({
+        where: { date: { gte: startDate, lt: endDate } },
+      }),
+      this.prisma.client.holidayCalendar.findMany({
+        where: {
+          OR: [
+            { startDate: { lte: endDate }, endDate: { gte: startDate } },
+          ],
+        },
+      }),
     ]);
-
-    const year = startDate.getFullYear();
-    const monthIdx = startDate.getMonth();
-    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
     // Build lookup maps
     const assignMap: Record<string, Record<number, any>> = {};
@@ -433,63 +552,362 @@ export class AttendanceService {
       logMap[l.employeeId][day] = l;
     }
 
+    const furloughMap: Record<string, any> = {};
+    for (const f of furloughBalances) {
+      furloughMap[f.employeeId] = f;
+    }
+
+    const mealMap: Record<string, Record<number, any>> = {};
+    for (const m of mealsList) {
+      const day = new Date(m.date).getDate();
+      if (!mealMap[m.employeeId]) mealMap[m.employeeId] = {};
+      mealMap[m.employeeId][day] = m;
+    }
+
+    const isAppForEmployeeAndDate = (app: any, empId: string, dateStr: string) => {
+      if (app.employeeId !== empId) return false;
+      if (!app.payload) return false;
+      const p = typeof app.payload === 'string' ? JSON.parse(app.payload) : app.payload;
+      if (p.date === dateStr) return true;
+      if (Array.isArray(p.dates) && p.dates.includes(dateStr)) return true;
+      if (p.fromDate && p.toDate && dateStr >= p.fromDate && dateStr <= p.toDate) return true;
+      if (p.startDate && p.endDate && dateStr >= p.startDate && dateStr <= p.endDate) return true;
+      return false;
+    };
+
+    const getAppHoursOrCoeff = (app: any): number => {
+      if (!app.payload) return 1.0;
+      const p = typeof app.payload === 'string' ? JSON.parse(app.payload) : app.payload;
+      if (typeof p.hours === 'number' && p.hours > 0) return p.hours;
+      if (typeof p.workday === 'number' && p.workday > 0) return p.workday;
+      if (typeof p.duration === 'number' && p.duration > 0) return p.duration;
+      return 1.0;
+    };
+
+    const nowStr = new Date().toISOString().slice(0, 10);
+
     // Build rows
     const rows = employees.map((emp) => {
       let totalStandard = 0;
-      let totalActual = 0;
-      let totalOT = 0;
-      let totalLeave = 0;
+      let totalShiftWorkday = 0;
+      let totalHolidayWorkday = 0;
+      let totalMissionWorkday = 0;
+      let totalFurloughUsed = 0;
+      let totalCompLeaveUsed = 0;
+      let totalOTHours = 0;
+      let totalOTWorkday = 0;
+      let totalExtraHours = 0;
+      let totalExtraWorkday = 0;
+      let totalLateMinutes = 0;
+      let totalEarlyMinutes = 0;
+      let totalMissingCount = 0;
+      let totalUnexcusedDays = 0;
+      let totalEffectiveHours = 0;
+      let totalNightHours = 0;
+      let totalMealCount = 0;
+
+      const empFurlough = furloughMap[emp.id];
+      const furloughInitial = empFurlough ? empFurlough.yearOpen : 12;
 
       const cells = days.map((day) => {
-        const date = new Date(year, monthIdx, day);
-        const dow = date.getDay();
+        const dateObj = new Date(year, monthIdx, day);
+        const dow = dateObj.getDay();
         const isWeekend = dow === 0 || dow === 6;
+        const dateStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
         const shift = assignMap[emp.id]?.[day];
         const log = logMap[emp.id]?.[day];
-        
-        if (shift && !isWeekend) totalStandard++;
-        
-        let status = 'NONE'; // NONE | PRESENT | ABSENT | LATE | LEAVE | OT | WEEKEND
-        let hours = 0;
+        const mealLog = mealMap[emp.id]?.[day];
 
-        if (isWeekend) {
-          status = 'WEEKEND';
-        } else if (shift) {
-          if (log) {
+        // Find relevant approved apps for this day
+        const dayApps = approvedApps.filter((a) => isAppForEmployeeAndDate(a, emp.id, dateStr));
+        const leaveApp = dayApps.find((a) =>
+          ['approval-leave', 'Đơn xin nghỉ phép', 'Đơn nghỉ phép', 'Nghỉ phép', 'Nghỉ phép có lương'].includes(a.type),
+        );
+        const compLeaveApp = dayApps.find((a) =>
+          ['Đơn nghỉ bù', 'approval-comp-leave', 'Nghỉ bù'].includes(a.type),
+        );
+        const missionApp = dayApps.find((a) =>
+          ['Đơn công tác', 'approval-mission', 'approval-business-trip', 'Công tác'].includes(a.type),
+        );
+        const otApp = dayApps.find((a) =>
+          ['Đơn làm thêm giờ', 'approval-ot', 'approval-overtime', 'Làm thêm'].includes(a.type),
+        );
+        const extraApp = dayApps.find((a) =>
+          ['Đơn tăng ca', 'Tăng ca'].includes(a.type),
+        );
+
+        // Check if holiday
+        const isHoliday = holidays.some((h) => {
+          const s = new Date(h.startDate).toISOString().slice(0, 10);
+          const e = new Date(h.endDate).toISOString().slice(0, 10);
+          return dateStr >= s && dateStr <= e;
+        });
+
+        // Parse partial leave payload if present
+        let leaveSegment: LeaveSegmentInput | null = null;
+        if (leaveApp) {
+          const p = typeof leaveApp.payload === 'string' ? JSON.parse(leaveApp.payload) : leaveApp.payload;
+          leaveSegment = {
+            id: leaveApp.id,
+            type: leaveApp.type,
+            fromTime: p.fromTime || p.startTime || null,
+            toTime: p.toTime || p.endTime || null,
+            durationHours: typeof p.hours === 'number' ? p.hours : (typeof p.duration === 'number' ? p.duration : null),
+            workdayRatio: typeof p.workday === 'number' ? p.workday : (typeof p.ratio === 'number' ? p.ratio : null),
+            isPaid: p.isPaid !== false,
+          };
+        }
+
+        const isEnded = isShiftEnded(shift, dateStr);
+
+        let status = 'UNASSIGNED'; // UNASSIGNED | PRESENT | PARTIAL_LEAVE | LEAVE | OT | MISSION | COMP_LEAVE | WEEKEND | HOLIDAY | MISSING_PUNCH | PENDING | ABSENT
+        let hours = 0; // Giờ làm việc thực tế
+        let leaveHours = 0; // Giờ nghỉ phép hưởng lương
+        let workedWorkday = 0;
+        let leaveWorkday = 0;
+        let dayWorkday = 0;
+        let lateMinutes = 0;
+        let earlyMinutes = 0;
+        let nightHours = 0;
+
+        if (shift) {
+          // 1. Công chuẩn: Chỉ cộng tổng công cấu hình của các ca chính, loại trừ ca tăng ca/OT
+          const isOvertimeShift =
+            shift.code?.toUpperCase().includes('OT') ||
+            shift.name?.toLowerCase().includes('tăng ca') ||
+            shift.name?.toLowerCase().includes('làm thêm');
+
+          if (!isOvertimeShift) {
+            totalStandard += (shift.coefficient ?? 1.0);
+          }
+
+          // 2. Tính toán công ca và công từ đơn nghỉ (vừa làm vừa nghỉ một phần ca)
+          const metrics = calculateShiftAttendanceWithLeave(shift, log, leaveSegment, isEnded);
+          hours = metrics.effectiveWorkedHours;
+          leaveHours = metrics.leaveHours;
+          workedWorkday = metrics.workedWorkday;
+          leaveWorkday = metrics.leaveWorkday;
+          dayWorkday = metrics.totalDayWorkday;
+          lateMinutes = metrics.lateMinutes;
+          earlyMinutes = metrics.earlyMinutes;
+
+          totalLateMinutes += lateMinutes;
+          totalEarlyMinutes += earlyMinutes;
+          totalEffectiveHours += hours;
+          totalShiftWorkday += workedWorkday;
+          totalFurloughUsed += leaveWorkday;
+
+          if (metrics.status === 'MISSING_CHECKIN' || metrics.status === 'MISSING_CHECKOUT') {
+            totalMissingCount += 1;
+            status = 'MISSING_PUNCH';
+          } else if (metrics.status === 'PARTIAL_LEAVE') {
+            status = 'PARTIAL_LEAVE';
+          } else if (metrics.status === 'LEAVE') {
+            status = 'LEAVE';
+          } else if (metrics.status === 'PRESENT') {
             status = 'PRESENT';
-            hours = log.hoursWorked ?? 8;
-            totalActual += 1;
-          } else {
-            // Check approved leave
-            const hasLeave = approvedApps.some((a) => {
-              const appDate = (a.payload as any)?.date;
-              return a.employeeId === emp.id && appDate === `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-            });
-            if (hasLeave) {
-              status = 'LEAVE';
-              totalLeave++;
-              totalActual += 1;
+          } else if (metrics.status === 'PENDING') {
+            status = 'PENDING';
+          } else if (metrics.status === 'ABSENT') {
+            if (compLeaveApp) {
+              status = 'COMP_LEAVE';
+              const compCoeff = Math.min(shift.coefficient ?? 1.0, getAppHoursOrCoeff(compLeaveApp));
+              dayWorkday = compCoeff;
+              totalCompLeaveUsed += compCoeff;
+            } else if (missionApp) {
+              status = 'MISSION';
+              const missionCoeff = shift.coefficient ?? 1.0;
+              dayWorkday = missionCoeff;
+              totalMissionWorkday += missionCoeff;
+              hours = shift.standardHours ?? 8;
+              totalEffectiveHours += hours;
+            } else if (isHoliday) {
+              status = 'HOLIDAY';
+              const holCoeff = shift.coefficient ?? 1.0;
+              dayWorkday = holCoeff;
+              totalHolidayWorkday += holCoeff;
             } else {
-              status = 'ABSENT';
+              status = isWeekend ? 'WEEKEND' : 'ABSENT';
+              if (!isWeekend) {
+                totalUnexcusedDays += 1;
+              }
             }
+          }
+
+          // Ca qua đêm
+          if (shift.overnight && hours > 0) {
+            nightHours = hours;
+            totalNightHours += nightHours;
+          }
+        } else {
+          // Không có ca phân công
+          if (isHoliday) {
+            status = 'HOLIDAY';
+          } else if (missionApp) {
+            status = 'MISSION';
+            dayWorkday = 1.0;
+            totalMissionWorkday += 1.0;
+            hours = 8;
+            totalEffectiveHours += 8;
+          } else if (leaveApp) {
+            status = 'LEAVE';
+            dayWorkday = 1.0;
+            totalFurloughUsed += 1.0;
+            leaveHours = 8;
+          } else if (compLeaveApp) {
+            status = 'COMP_LEAVE';
+            dayWorkday = 1.0;
+            totalCompLeaveUsed += 1.0;
+          } else {
+            status = isWeekend ? 'WEEKEND' : 'UNASSIGNED';
           }
         }
 
-        // Check OT
-        const hasOT = approvedApps.some((a) => {
-          const appDate = (a.payload as any)?.date;
-          return a.employeeId === emp.id && a.type === 'Đơn làm thêm giờ' &&
-            appDate === `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        });
-        if (hasOT) { status = 'OT'; totalOT++; totalActual += 1; }
+        // Process Overtime / Tăng ca
+        let otWorkday = 0;
+        if (otApp) {
+          const otVal = getAppHoursOrCoeff(otApp);
+          const otH = otVal > 8 ? otVal : otVal;
+          totalOTHours += otH;
+          otWorkday = Math.round((otH / 8) * 100) / 100;
+          totalOTWorkday += otWorkday;
+        }
+        if (extraApp) {
+          const extraVal = getAppHoursOrCoeff(extraApp);
+          totalExtraHours += extraVal;
+          const extraWd = Math.round((extraVal / 8) * 100) / 100;
+          totalExtraWorkday += extraWd;
+        }
 
-        return { day, status, hours, shift: shift?.name ?? null };
+        // Tính suất ăn
+        if (mealLog) {
+          totalMealCount += (mealLog.caCount || 0) + (mealLog.otCount || 0);
+        } else if (hours >= 4 || dayWorkday >= 0.5) {
+          totalMealCount += 1;
+        }
+
+        const checkInStr = log?.checkIn
+          ? (log.checkIn instanceof Date ? log.checkIn.toISOString().slice(11, 16) : String(log.checkIn).slice(11, 16))
+          : null;
+        const checkOutStr = log?.checkOut
+          ? (log.checkOut instanceof Date ? log.checkOut.toISOString().slice(11, 16) : String(log.checkOut).slice(11, 16))
+          : null;
+
+        const finalDayWorkday = Math.round((dayWorkday + otWorkday) * 100) / 100;
+
+        return {
+          day,
+          date: dateStr,
+          dayOfWeek: dow,
+          isWeekend,
+          hasShift: !!shift,
+          shift: shift
+            ? {
+                id: shift.id,
+                name: shift.name,
+                code: shift.code,
+                startTime: shift.startTime,
+                endTime: shift.endTime,
+                breakStart: shift.breakStart ?? null,
+                breakEnd: shift.breakEnd ?? null,
+                coefficient: shift.coefficient ?? 1.0,
+                flexibleMinutes: (shift as any).flexibleMinutes ?? 0,
+                graceLateMinutes: shift.graceLateMinutes ?? 15,
+                standardHours: shift.standardHours ?? 8,
+                overnight: shift.overnight ?? false,
+              }
+            : null,
+          checkIn: checkInStr,
+          checkOut: checkOutStr,
+          checkInTime: log?.checkIn ? new Date(log.checkIn).toISOString() : null,
+          checkOutTime: log?.checkOut ? new Date(log.checkOut).toISOString() : null,
+          checkInLocation: log?.checkInLocation ?? null,
+          checkOutLocation: log?.checkOutLocation ?? null,
+          hours: Math.round(hours * 100) / 100,
+          leaveHours: Math.round(leaveHours * 100) / 100,
+          workday: finalDayWorkday,
+          workdayRaw: dayWorkday + otWorkday,
+          workedWorkday: Math.round(workedWorkday * 100) / 100,
+          leaveWorkday: Math.round(leaveWorkday * 100) / 100,
+          lateMinutes,
+          earlyMinutes,
+          status,
+          application: dayApps[0]
+            ? {
+                id: dayApps[0].id,
+                type: dayApps[0].type,
+                reason: dayApps[0].reason || (dayApps[0].payload as any)?.reason || null,
+                status: dayApps[0].status,
+              }
+            : null,
+          applications: dayApps.map((a) => ({
+            id: a.id,
+            type: a.type,
+            reason: a.reason || (a.payload as any)?.reason || null,
+            status: a.status,
+          })),
+        };
       });
 
+      // Công tháng: Cộng kết quả công từng ngày, không cộng trùng OT
+      const totalFinalWorkdays = Math.round(cells.reduce((acc, c) => acc + (c.workday || 0), 0) * 100) / 100;
+      const furloughRemaining = Math.max(0, furloughInitial - totalFurloughUsed);
+
       return {
-        employee: { id: emp.id, code: emp.code, name: emp.name, department: (emp.department as any)?.name },
+        employee: {
+          id: emp.id,
+          code: emp.code,
+          name: emp.name,
+          department: emp.department?.name ?? '—',
+          position: emp.position?.name ?? emp.jobTitle?.name ?? '—',
+        },
         cells,
-        summary: { totalStandard, totalActual, totalOT, totalLeave, totalAbsent: totalStandard - totalActual + totalLeave },
+        summary: {
+          // 12 exact summary groups per specification
+          late: { minutes: totalLateMinutes, fine: null, workdayPenalty: null },
+          early: { minutes: totalEarlyMinutes, fine: null, workdayPenalty: null },
+          missing: { count: totalMissingCount, fine: null, workdayPenalty: null },
+          unexcused: { days: totalUnexcusedDays },
+          furlough: {
+            initial: furloughInitial,
+            used: Math.round(totalFurloughUsed * 100) / 100,
+            remaining: Math.round(furloughRemaining * 100) / 100,
+          },
+          compLeave: {
+            initial: null,
+            used: Math.round(totalCompLeaveUsed * 100) / 100,
+            addedHours: null,
+            remaining: null,
+          },
+          mainWork: {
+            shiftWorkday: Math.round(totalShiftWorkday * 100) / 100,
+            holidayWorkday: Math.round(totalHolidayWorkday * 100) / 100,
+            businessTripWorkday: Math.round(totalMissionWorkday * 100) / 100,
+          },
+          overtime: {
+            hours: Math.round(totalOTHours * 100) / 100,
+            workday: Math.round(totalOTWorkday * 100) / 100,
+          },
+          extraWork: {
+            hours: Math.round(totalExtraHours * 100) / 100,
+            workday: Math.round(totalExtraWorkday * 100) / 100,
+          },
+          meals: { count: totalMealCount },
+          standard: { totalStandard: Math.round(totalStandard * 100) / 100 },
+          total: {
+            nightHours: Math.round(totalNightHours * 100) / 100,
+            totalHours: Math.round(totalEffectiveHours * 100) / 100,
+            totalWorkdays: totalFinalWorkdays,
+          },
+          // Legacy fields for backward compatibility (payroll service, etc.)
+          totalStandard: Math.round(totalStandard * 100) / 100,
+          totalActual: totalFinalWorkdays,
+          totalOT: Math.round(totalOTWorkday * 100) / 100,
+          totalLeave: Math.round((totalFurloughUsed + totalCompLeaveUsed) * 100) / 100,
+          totalLate: totalLateMinutes,
+          totalAbsent: totalUnexcusedDays,
+        },
       };
     });
 
@@ -821,7 +1239,7 @@ export class AttendanceService {
     let imported = 0;
     for (const rec of records) {
       const emp = await this.prisma.client.employee.findFirst({
-        where: { OR: [{ code: rec.personnelCode }, { id: rec.personnelCode }] },
+        where: { OR: [{ code: rec.personnelCode }, { id: rec.personnelCode }, { syncCode: rec.personnelCode }] },
       });
       if (emp) {
         const checkDate = new Date(rec.timestamp);
@@ -1062,7 +1480,7 @@ export class AttendanceService {
     let imported = 0;
     for (const rec of records) {
       const emp = await this.prisma.client.employee.findFirst({
-        where: { OR: [{ code: rec.personnelCode }, { id: rec.personnelCode }] },
+        where: { OR: [{ code: rec.personnelCode }, { id: rec.personnelCode }, { syncCode: rec.personnelCode }] },
       });
       if (emp) {
         imported++;
@@ -1075,107 +1493,8 @@ export class AttendanceService {
   calculateAttendanceMetrics(
     shift: any | null,
     log: any | null,
-  ): {
-    workday: number;
-    effectiveHours: number;
-    effectiveMinutes: number;
-    lateMinutes: number;
-    earlyMinutes: number;
-    status: string;
-  } {
-    if (!log || (!log.checkIn && !log.checkOut)) {
-      return {
-        workday: 0,
-        effectiveHours: 0,
-        effectiveMinutes: 0,
-        lateMinutes: 0,
-        earlyMinutes: 0,
-        status: shift ? 'ABSENT' : 'NO_SHIFT',
-      };
-    }
-
-    const checkIn = log.checkIn ? new Date(log.checkIn) : null;
-    const checkOut = log.checkOut ? new Date(log.checkOut) : null;
-
-    let lateMinutes = 0;
-    let earlyMinutes = 0;
-    let effectiveHours = 0;
-    let effectiveMinutes = 0;
-    let workday = 0;
-    let status = 'PRESENT';
-
-    // 1. Calculate late minutes
-    if (checkIn && shift?.startTime) {
-      const [sh, sm] = shift.startTime.split(':').map(Number);
-      const inH = checkIn.getHours();
-      const inM = checkIn.getMinutes();
-      const diffMin = inH * 60 + inM - (sh * 60 + sm);
-      const grace = shift.graceLateMinutes ?? 15;
-      if (diffMin > grace) {
-        lateMinutes = diffMin;
-      }
-    }
-
-    // 2. Calculate early minutes
-    if (checkOut && shift?.endTime) {
-      const [eh, em] = shift.endTime.split(':').map(Number);
-      const outH = checkOut.getHours();
-      const outM = checkOut.getMinutes();
-      const diffMin = eh * 60 + em - (outH * 60 + outM);
-      const grace = (shift as any).graceEarlyMinutes ?? 15;
-      if (diffMin > grace) {
-        earlyMinutes = diffMin;
-      }
-    }
-
-    // 3. Calculate actual work duration & workday
-    if (checkIn && checkOut) {
-      const diffMs = checkOut.getTime() - checkIn.getTime();
-      let diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
-
-      // Deduct lunch break if shift specifies break window
-      if (shift?.breakStart && shift?.breakEnd) {
-        const [bsh, bsm] = shift.breakStart.split(':').map(Number);
-        const [beh, bem] = shift.breakEnd.split(':').map(Number);
-        const breakDurationHrs = Math.max(0, (beh * 60 + bem - (bsh * 60 + bsm)) / 60);
-        if (diffHrs >= 5 && breakDurationHrs > 0) {
-          diffHrs = Math.max(0, diffHrs - breakDurationHrs);
-        }
-      }
-
-      effectiveHours = Math.round(diffHrs * 10) / 10;
-      effectiveMinutes = Math.round(effectiveHours * 60);
-
-      const standardHours = shift?.standardHours || 8.0;
-      const coefficient = shift?.coefficient || 1.0;
-
-      // Full work credit if within 15 minutes of standard hours
-      if (effectiveHours >= standardHours - 0.25) {
-        workday = coefficient * 1.0;
-      } else if (effectiveHours >= standardHours / 2 - 0.25) {
-        workday = coefficient * 0.5;
-      } else if (effectiveHours > 0) {
-        workday = Math.round((effectiveHours / standardHours) * 10) / 10;
-      } else {
-        workday = 0;
-      }
-      status = 'PRESENT';
-    } else if (checkIn) {
-      workday = 0;
-      status = 'MISSING_CHECKOUT';
-    } else if (checkOut) {
-      workday = 0;
-      status = 'MISSING_CHECKIN';
-    }
-
-    return {
-      workday,
-      effectiveHours,
-      effectiveMinutes,
-      lateMinutes,
-      earlyMinutes,
-      status,
-    };
+  ): AttendanceCalculationResult {
+    return calculateAttendanceMetricsEngine(shift, log);
   }
 
   // ── Today's Attendance & Shifts for Employee ─────────────────────────────
@@ -1319,14 +1638,14 @@ export class AttendanceService {
         verifyMode: r.verifyMode || 'GPS Chuẩn Xác',
       })),
       assignedLocations,
-      workday: metrics.workday,
-      workDay: metrics.workday,
+      workday: metrics.workdayRounded,
+      workDay: metrics.workdayRounded,
       effectiveHours: metrics.effectiveHours,
       effectiveMinutes: metrics.effectiveMinutes,
       lateMinutes: metrics.lateMinutes,
       earlyMinutes: metrics.earlyMinutes,
       monthSummary: {
-        totalWorkdays: Math.round(totalWorkdays * 10) / 10,
+        totalWorkdays: Math.round(totalWorkdays * 100) / 100,
         lateMinutes: metrics.lateMinutes,
         earlyMinutes: metrics.earlyMinutes,
       },
@@ -1334,17 +1653,14 @@ export class AttendanceService {
   }
 
   // ── Monthly Attendance Matrix for Individual Employee ────────────────────
-  private calcShiftHours(startTime?: string, endTime?: string): number {
-    if (!startTime || !endTime) return 8;
-    const [sh, sm] = startTime.split(':').map(Number);
-    const [eh, em] = endTime.split(':').map(Number);
-    if (isNaN(sh) || isNaN(eh)) return 8;
-    let startMin = sh * 60 + (sm || 0);
-    let endMin = eh * 60 + (em || 0);
-    if (endMin < startMin) endMin += 24 * 60;
-    const diffHours = (endMin - startMin) / 60;
-    const effectiveHours = diffHours >= 7 ? diffHours - 1 : diffHours;
-    return Math.round(effectiveHours * 10) / 10;
+  private calcShiftHours(
+    startTime?: string,
+    endTime?: string,
+    overnight = false,
+    breakStart?: string | null,
+    breakEnd?: string | null,
+  ): number {
+    return this.calculateShiftStandardHours(startTime, endTime, overnight, breakStart, breakEnd);
   }
 
   async getMyMonthAttendance(employeeId: string, month: string) {
@@ -1434,7 +1750,7 @@ export class AttendanceService {
 
       const dayShifts = dayAssignments.map((a) => {
         const s = a.shift;
-        const hours = s?.standardHours || this.calcShiftHours(s?.startTime, s?.endTime);
+        const hours = s?.standardHours || this.calcShiftHours(s?.startTime, s?.endTime, s?.overnight, s?.breakStart, s?.breakEnd);
         return {
           assignmentId: a.id,
           shiftId: a.shiftId,
@@ -1536,7 +1852,7 @@ export class AttendanceService {
         checkOutLocation,
         lateMinutes,
         earlyMinutes,
-        workDay,
+        workDay: Math.round(workDay * 100) / 100,
         leaveCode,
         isUnexcused,
         standardWorkdays: dayStandardWorkdays,
@@ -1556,11 +1872,11 @@ export class AttendanceService {
       isLocked: !!lockStatus,
       daysList,
       summary: {
-        totalWorkday: Math.round(totalWorkday * 10) / 10,
-        totalHours: Math.round(totalHours * 10) / 10,
-        totalEffectiveHours: Math.round(totalHours * 10) / 10,
+        totalWorkday: Math.round(totalWorkday * 100) / 100,
+        totalHours: Math.round(totalHours * 100) / 100,
+        totalEffectiveHours: Math.round(totalHours * 100) / 100,
         standardWorkdays,
-        standardHours: Math.round(standardHours * 10) / 10,
+        standardHours: Math.round(standardHours * 100) / 100,
         unexcusedLeaveCount,
         excusedLeaveCount,
         totalLateMinutes,

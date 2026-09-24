@@ -69,8 +69,17 @@ export function shiftInput(input: Record<string, unknown>) {
       throw new BadRequestException(`Trường ${key} phải có định dạng HH:mm hoặc HH:mm:ss`);
     return value.length === 5 ? `${value}:00` : value;
   };
+  let flexibleMinutes = 0;
+  if (input.flexibleMinutes !== undefined && input.flexibleMinutes !== null && input.flexibleMinutes !== '') {
+    const flex = Number(input.flexibleMinutes);
+    if (!Number.isInteger(flex) || flex < 0 || flex > 300) {
+      throw new BadRequestException('Số phút linh hoạt phải là số nguyên từ 0 đến 300');
+    }
+    flexibleMinutes = flex;
+  }
   return { code: (input.code as string).trim(), name: (input.name as string).trim(), startTime, endTime,
     overnight: input.overnight === true, checkInBefore: duration('checkInBefore'), checkOutAfter: duration('checkOutAfter'),
     breakStart, breakEnd, standardHours: workMinutes / 60, coefficient: input.coefficient,
+    flexibleMinutes,
     description: typeof input.description === 'string' ? input.description.trim() : null };
 }

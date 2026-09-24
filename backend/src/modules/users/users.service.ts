@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { MailService } from '../mail/mail.service';
 import * as bcrypt from 'bcrypt';
@@ -33,18 +33,25 @@ export class UsersService {
     });
   }
 
-  async create(data: { username: string; employeeId: string; displayName?: string; password?: string; roleName?: string; sendEmail?: boolean }) {
-    const employee = await this.prisma.client.employee.findUnique({
-      where: { id: data.employeeId },
-    });
-    
-    if (!employee) throw new NotFoundException('Không tìm thấy nhân sự');
+  async create(data: { username: string; employeeId?: string; displayName?: string; password?: string; roleName?: string; sendEmail?: boolean }) {
+    let employee: any = null;
+    if (data.employeeId && data.employeeId.trim() !== '') {
+      employee = await this.prisma.client.employee.findUnique({
+        where: { id: data.employeeId },
+      });
+      if (!employee) throw new NotFoundException('Không tìm thấy nhân sự');
+    }
 
     const passwordToHash = data.password && data.password.trim() !== '' ? data.password : '123456aA@';
     const passwordHash = await bcrypt.hash(passwordToHash, 10);
 
+    const orConditions: any[] = [{ username: data.username }];
+    if (employee) {
+      orConditions.push({ employeeId: employee.id });
+    }
+
     const existingUser = await this.prisma.client.user.findFirst({
-      where: { OR: [{ employeeId: data.employeeId }, { username: data.username }] }
+      where: { OR: orConditions }
     });
 
     let userId: string;
@@ -54,8 +61,8 @@ export class UsersService {
         where: { id: existingUser.id },
         data: {
           username: data.username,
-          displayName: data.displayName || employee.name,
-          employeeId: data.employeeId,
+          displayName: data.displayName || employee?.name || data.username,
+          employeeId: employee?.id ?? existingUser.employeeId,
           passwordHash,
           status: 'ACTIVE',
         }
@@ -65,9 +72,9 @@ export class UsersService {
       const created = await this.prisma.client.user.create({
         data: {
           username: data.username,
-          displayName: data.displayName || employee.name,
+          displayName: data.displayName || employee?.name || data.username,
           passwordHash,
-          employeeId: data.employeeId,
+          employeeId: employee?.id ?? null,
           mustChangePassword: false,
           status: 'ACTIVE',
         },
@@ -118,11 +125,11 @@ export class UsersService {
       }
     });
 
-    const targetEmail = employee.email || `${data.username}@hadibeauty.vn`;
+    const targetEmail = employee?.email || `${data.username}@hadibeauty.vn`;
     if (data.sendEmail !== false) {
       await this.mailService.sendLoginCredentials({
         to: targetEmail,
-        employeeName: employee.name,
+        employeeName: employee?.name || data.displayName || data.username,
         username: data.username,
         password: data.password && data.password.trim() !== '' ? data.password : '123456aA@',
       }).catch(() => {});
@@ -214,7 +221,7 @@ export class UsersService {
       include: { employee: true }
     });
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
-    
+
     // Auto generate random 8-char password
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
     let randomPass = '';
@@ -229,7 +236,7 @@ export class UsersService {
     });
 
     const email = user.employee?.email || `${user.username}@hadibeauty.vn`;
-    
+
     await this.mailService.sendLoginCredentials({
       to: email,
       employeeName: user.employee?.name || user.displayName,
@@ -253,15 +260,70 @@ export class UsersService {
     });
   }
 
+  /**
+   * Xóa tài khoản người dùng (không xóa hồ sơ nhân sự).
+   * - Xóa session, notification, userRole liên quan.
+   * - Giữ nguyên bản ghi employee (chỉ huỷ liên kết).
+   * - Chặn xóa tài khoản 'admin' (username).
+   */
   async remove(id: string) {
     const user = await this.prisma.client.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
 
+    if (user.username === 'admin') {
+      throw new ForbiddenException('Không thể xóa tài khoản quản trị hệ thống.');
+    }
+
+    // Xóa dữ liệu phụ thuộc - giữ nguyên hồ sơ nhân sự
     await this.prisma.client.userRole.deleteMany({ where: { userId: id } });
     await this.prisma.client.notification.deleteMany({ where: { userId: id } });
     await this.prisma.client.session.deleteMany({ where: { userId: id } });
 
     return this.prisma.client.user.delete({ where: { id } });
+  }
+
+  /**
+   * Xóa hàng loạt tài khoản người dùng.
+   * Trả về { succeeded: string[], failed: { id, username, reason }[] }
+   */
+  async bulkRemove(ids: string[]): Promise<{
+    succeeded: string[];
+    failed: { id: string; username: string; reason: string }[];
+  }> {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('Danh sách ID không hợp lệ.');
+    }
+
+    const succeeded: string[] = [];
+    const failed: { id: string; username: string; reason: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const user = await this.prisma.client.user.findUnique({ where: { id } });
+        if (!user) {
+          failed.push({ id, username: id, reason: 'Tài khoản không tồn tại hoặc đã bị xóa.' });
+          continue;
+        }
+        if (user.username === 'admin') {
+          failed.push({ id, username: user.username, reason: 'Không thể xóa tài khoản quản trị hệ thống.' });
+          continue;
+        }
+        await this.prisma.client.userRole.deleteMany({ where: { userId: id } });
+        await this.prisma.client.notification.deleteMany({ where: { userId: id } });
+        await this.prisma.client.session.deleteMany({ where: { userId: id } });
+        await this.prisma.client.user.delete({ where: { id } });
+        succeeded.push(id);
+      } catch (err: any) {
+        const user = await this.prisma.client.user.findUnique({ where: { id } }).catch(() => null);
+        failed.push({
+          id,
+          username: user?.username || id,
+          reason: err?.message || 'Lỗi không xác định.',
+        });
+      }
+    }
+
+    return { succeeded, failed };
   }
 
   async removeEmployeeAndUser(employeeId: string) {
@@ -294,5 +356,3 @@ export class UsersService {
     return this.prisma.client.employee.delete({ where: { id: employeeId } });
   }
 }
-
-

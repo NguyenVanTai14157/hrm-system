@@ -62,6 +62,9 @@ export class AttendanceController {
       graceLateMinutes?: number;
       color?: string;
       description?: string;
+      overnight?: boolean;
+      checkInBefore?: string;
+      checkOutAfter?: string;
     },
   ) {
     return this.attendanceService.createShift(body);
@@ -81,6 +84,9 @@ export class AttendanceController {
       graceLateMinutes?: number;
       color?: string;
       description?: string;
+      overnight?: boolean;
+      checkInBefore?: string;
+      checkOutAfter?: string;
     },
   ) {
     return this.attendanceService.updateShift(id, body);

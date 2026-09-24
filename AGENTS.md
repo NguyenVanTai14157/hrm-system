@@ -30,6 +30,15 @@ Mọi AI tham gia hỗ trợ dự án này PHẢI TUÂN THỦ 100% các nguyên 
 ---
 
 ### 5. ✅ TIÊU CHUẨN KIỂM ĐỊNH (QUALITY ASSURANCE)
-- Sau mỗi lần chỉnh sửa mã nguồn, bắt buộc kiểm tra tính toàn vẹn:
-  - Backend: `npm run typecheck` đạt **0 lỗi**.
-  - Admin-Web: `npx tsc --noEmit` đạt **0 lỗi**.
+- **Thời điểm kiểm định**: Chạy kiểm định sau khi hoàn tất một nhóm thay đổi hoàn chỉnh, không chạy sau từng lần chỉnh file.
+- **Phạm vi Typecheck**:
+  - Chỉ sửa Backend: chạy `npm run typecheck` tại Backend đạt **0 lỗi**.
+  - Chỉ sửa Admin-Web: chạy `npx tsc --noEmit` tại Admin-Web đạt **0 lỗi**.
+  - Sửa cả hai hoặc thay đổi API/schema/kiểu dữ liệu dùng chung: bắt buộc chạy cả hai.
+- **Kiểm thử nghiệp vụ (Logic Test)**:
+  - Với logic nghiệp vụ trọng yếu (tính công, bảng lương, phân quyền, xóa dữ liệu...): bắt buộc chạy thêm kiểm thử cô lập liên quan.
+  - Sửa giao diện đơn giản không bắt buộc viết kiểm thử tự động mới.
+- **Tối ưu & Phát hành**:
+  - Không chạy lại kiểm tra đã đạt nếu không có thay đổi hoặc phát hiện mới liên quan.
+  - Trước khi phát hành vận hành: chạy đầy đủ kiểm định.
+- **Báo cáo minh bạch**: Báo rõ đã chạy gì, kết quả và phần chưa kiểm tra; tuyệt đối không bỏ kiểm tra chỉ để báo hoàn thành nhanh.

@@ -773,6 +773,9 @@ export function AttendanceSettingsScreen() {
         width={tab === 'gps' ? 820 : 880}
         open={open}
         destroyOnClose
+        maskClosable={false}
+        keyboard={false}
+        closable={true}
         onCancel={() => !saving && setOpen(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>

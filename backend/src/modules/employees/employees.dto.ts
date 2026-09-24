@@ -52,6 +52,16 @@ export class CreateEmployeeDto {
   @Transform(emptyToUndefined) @IsOptional() @IsString() permanentAddress?: string;
   @Transform(emptyToUndefined) @IsOptional() @IsString() minWageZone?: string;
   @Transform(emptyToUndefined) @IsOptional() @IsString() gpsLocation?: string;
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (Array.isArray(value)) return value.filter((v: unknown) => typeof v === 'string' && v.trim().length > 0);
+    if (typeof value === 'string') return [value.trim()];
+    return value;
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  gpsLocationIds?: string[];
   @Transform(toInteger) @IsOptional() @IsInt() salaryBase?: number;
 
   @IsOptional() @IsBoolean() createUserAccount?: boolean;
